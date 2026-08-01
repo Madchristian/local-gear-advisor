@@ -1,5 +1,7 @@
 # Local Gear Advisor
 
+Repository: https://github.com/Madchristian/local-gear-advisor
+
 Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MVP liest einen vollständigen `/simc`-Export einschließlich Taschengegenständen, erzeugt direkte `profileset`-Varianten, startet `simc.exe`, prüft den JSON2-Bericht und erzeugt eine `Results.lua` für ein schlankes Tooltip-Addon.
 
 ## Aktueller MVP
