@@ -6,8 +6,8 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 
 ## Aktueller MVP
 
-- Schutz-Paladin und Elementar-Schamane sowie die übrigen Paladin-/Schamanen-Specs im Ergebnisformat
-- Tooltip-Addon gezielt für WoW Retail 12.0.7 und das offizielle SimulationCraft-Addon 12.0.7-02
+- alle 40 in der gepinnten SimulationCraft-Revision `5a982a3` enthaltenen Klassen-/Spec-Kombinationen über ein deterministisch erzeugtes Register; darunter Wächter-Druide (`104`) und Verschlinger-Dämonenjäger (`1480`)
+- Tooltip-Addon gezielt für WoW Retail 12.0.7 und das offizielle SimulationCraft-Addon 12.1.0-01
 - Ringe und Schmuckstücke werden gegen beide Plätze getestet
 - konfigurierbarer Mindest-Itemlevel-Filter (GUI/CLI standardmäßig 282); angelegte Baseline-Ausrüstung wird nie gefiltert
 - andere Kandidaten gegen ihren jeweiligen Slot; Waffenkandidaten werden transparent ausgeschlossen und nie simuliert oder veröffentlicht
@@ -23,6 +23,7 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 
 - vollständige Top-Gear-Kombinatorik mehrerer gleichzeitiger Upgrades
 - belastbare defensive Tankmetrik; der MVP bewertet DPS
+- belastbare Heilermetrik; auch für Heiler ist das Ergebnis ausschließlich ein offensiver DPS-Vergleich
 - automatischer Live-Datenaustausch während WoW läuft
 - automatische Addon-Installation oder Änderung von WoW-Dateien
 - Bewertung von Gegenständen, die nicht im importierten Taschenbereich standen
@@ -30,7 +31,7 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 
 ## Voraussetzungen
 
-1. Offizielles SimulationCraft-WoW-Addon `12.0.7-02` für den `/simc`-Export. Andere Serializer-Versionen werden nicht als kompatibel behauptet.
+1. Offizielles SimulationCraft-WoW-Addon `12.1.0-01` für den `/simc`-Export. Andere Serializer-Versionen werden nicht als kompatibel behauptet.
 2. Windows-Version von SimulationCraft für WoW `12.0.7.68887` mit `simc.exe`; andere DBC-/Buildstände werden fail-closed abgelehnt.
 3. Python 3.11+; für die Entwicklung wird `uv` verwendet.
 
@@ -39,8 +40,29 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 ```text
 uv sync --group dev
 .venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\ruff.exe check src tests
+.venv\Scripts\ruff.exe check src tests tools
+.venv\Scripts\python.exe tools\generate_spec_registry.py --revision 5a982a3 --source tests\fixtures\sc_specialization_data.inc --check
 ```
+
+### Spezialisierungsregister aktualisieren
+
+Die Laufzeit verwendet keine KI und rät keine Spec-IDs. Das eingecheckte
+`src/local_gear_advisor/data/spec_registry.json` wird aus der öffentlichen, auf eine konkrete
+Git-Revision festgelegten SimulationCraft-Datei `sc_specialization_data.inc` erzeugt. Für die
+aktuell verwendete Revision kann es ohne Netzwerkzugriff reproduziert und geprüft werden:
+
+```text
+.venv\Scripts\python.exe tools\generate_spec_registry.py \
+  --revision 5a982a3 \
+  --source tests\fixtures\sc_specialization_data.inc \
+  --check
+```
+
+Beim Wechsel auf eine neue SimC-Revision erzeugt derselbe Befehl ohne `--source` das Register
+direkt von der fest an diese Revision gebundenen HTTPS-Quelle. Redirects, übergroße oder
+unvollständige Quellen, unbekannte Klassenpräfixe, doppelte IDs und fehlende Klassen werden
+fail-closed abgelehnt. Erst nach Review und vollständigen Tests wird das erzeugte Register
+eingecheckt. Der JSON2-Bericht muss anschließend exakt dieselbe SimC-Git-Revision melden.
 
 ## Installation als Python-Paket
 
@@ -105,9 +127,10 @@ Es erfolgt keine automatische Installation in den WoW-Ordner.
 ## Tests und Abnahme
 
 ```text
-uv run ruff format --check src tests
-uv run ruff check src tests
+uv run ruff format --check src tests tools
+uv run ruff check src tests tools
 uv run pytest -q
+uv run python tools/generate_spec_registry.py --revision 5a982a3 --source tests/fixtures/sc_specialization_data.inc --check
 uv build
 ```
 
@@ -120,6 +143,7 @@ Die nachvollziehbare MVP-Abnahmematrix steht in [`docs/ACCEPTANCE.md`](docs/ACCE
 - Bei aktiviertem Filter werden Kandidaten unterhalb des gewählten Mindest-Itemlevels oder mit unbekanntem Itemlevel zuerst nach Fingerprint dedupliziert und ausgeschlossen. Verbleibende Waffen-Slots werden anschließend als nicht unterstützt gemeldet. Keine dieser Kategorien wird simuliert oder in `Results.lua` veröffentlicht.
 - Subprozesse verwenden eine Argumentliste mit `shell=False`.
 - Ein SimC-Fehler, Timeout, Warn-/Fehlerlog, fehlende Provenienz, abweichendes Szenario, falsche DBC-/WoW-Version, abweichende Iterationszahl, fehlender JSON2-Bericht oder unvollständiges Profileset-Ergebnis blockiert die Veröffentlichung.
+- Ein fehlendes, strukturell ungültiges oder nicht zur gemeldeten SimC-Git-Revision passendes Spezialisierungsregister blockiert die Veröffentlichung. Die Build-/CI-Prüfung stellt zusätzlich sicher, dass das eingecheckte Register bytegenau aus dem gepinnten Quell-Snapshot reproduzierbar ist. Unbekannte Klassen-/Spec-Paare bleiben fail-closed.
 - CLI und GUI dürfen ausschließlich die festgelegte lokale Stagingdatei `addon/LocalGearAdvisor/Results.lua` schreiben. Direkte WoW-/SavedVariables-Ausgabepfade werden nicht akzeptiert.
 - Das Projekt beendet WoW niemals selbst und installiert das Addon nicht automatisch.
 - Forschungspakete, Runs, Logs und echte Charakterexporte liegen unter ignorierten Verzeichnissen und gehören nicht in Git.

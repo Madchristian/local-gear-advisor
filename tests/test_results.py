@@ -1,9 +1,15 @@
+from dataclasses import replace as dc_replace
 from pathlib import Path
 
 import pytest
 
 from local_gear_advisor.profilesets import SimSettings, build_profileset_input
-from local_gear_advisor.results import evaluate_results, render_results_lua, write_atomic_verified
+from local_gear_advisor.results import (
+    ensure_supported_profile,
+    evaluate_results,
+    render_results_lua,
+    write_atomic_verified,
+)
 from local_gear_advisor.runner import ParsedSimcReport
 from local_gear_advisor.simc_export import parse_simc_export
 
@@ -92,3 +98,25 @@ def test_atomic_writer_verifies_published_bytes(tmp_path: Path) -> None:
 
     assert target.read_bytes() == b"LocalGearAdvisorResults = {}\n"
     assert not (tmp_path / "Results.lua.tmp").exists()
+
+
+def test_ensure_supported_profile_resolves_guardian_druid_via_registry() -> None:
+    profile, _built, _result = _evaluation()
+    druid_profile = dc_replace(profile, character_class="druid", spec="guardian")
+
+    assert ensure_supported_profile(druid_profile) == 104
+
+
+def test_ensure_supported_profile_resolves_demon_hunter_devourer_via_registry() -> None:
+    profile, _built, _result = _evaluation()
+    devourer_profile = dc_replace(profile, character_class="demonhunter", spec="devourer")
+
+    assert ensure_supported_profile(devourer_profile) == 1480
+
+
+def test_ensure_supported_profile_rejects_unknown_class_spec_pair() -> None:
+    profile, _built, _result = _evaluation()
+    unknown_profile = dc_replace(profile, character_class="warrior", spec="made_up_spec")
+
+    with pytest.raises(ValueError, match="unsupported class/spec pair"):
+        ensure_supported_profile(unknown_profile)

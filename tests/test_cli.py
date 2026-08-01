@@ -50,7 +50,9 @@ def test_cli_passes_and_reports_applied_min_item_level(tmp_path, monkeypatch, ca
 
     assert result == 0
     assert observed["settings"].min_item_level == 290
-    assert "2 Kandidat(en) unter Itemlevel 290" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "2 Kandidat(en) unter Itemlevel 290" in output
+    assert "Nur offensiver DPS-Vergleich" in output
 
 
 def test_cli_does_not_accept_arbitrary_output_path() -> None:

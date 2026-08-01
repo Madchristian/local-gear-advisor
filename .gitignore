@@ -11,6 +11,7 @@ research/
 *.html
 *.json
 !tests/fixtures/*.json
+!src/local_gear_advisor/data/spec_registry.json
 *.simc
 !tests/fixtures/*.simc
 Results.lua.tmp

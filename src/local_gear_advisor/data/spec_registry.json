@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "5a982a3",
+  "sourceSha256": "b57147ebc86d32b9a9a0c93e71230e790aa36653cd47fc388e4176d9dce0ea1f",
+  "sourceUrl": "https://raw.githubusercontent.com/simulationcraft/simc/5a982a3/engine/dbc/generated/sc_specialization_data.inc",
+  "specs": [
+    {
+      "class": "deathknight",
+      "spec": "blood",
+      "specId": 250
+    },
+    {
+      "class": "deathknight",
+      "spec": "frost",
+      "specId": 251
+    },
+    {
+      "class": "deathknight",
+      "spec": "unholy",
+      "specId": 252
+    },
+    {
+      "class": "demonhunter",
+      "spec": "devourer",
+      "specId": 1480
+    },
+    {
+      "class": "demonhunter",
+      "spec": "havoc",
+      "specId": 577
+    },
+    {
+      "class": "demonhunter",
+      "spec": "vengeance",
+      "specId": 581
+    },
+    {
+      "class": "druid",
+      "spec": "balance",
+      "specId": 102
+    },
+    {
+      "class": "druid",
+      "spec": "feral",
+      "specId": 103
+    },
+    {
+      "class": "druid",
+      "spec": "guardian",
+      "specId": 104
+    },
+    {
+      "class": "druid",
+      "spec": "restoration",
+      "specId": 105
+    },
+    {
+      "class": "evoker",
+      "spec": "augmentation",
+      "specId": 1473
+    },
+    {
+      "class": "evoker",
+      "spec": "devastation",
+      "specId": 1467
+    },
+    {
+      "class": "evoker",
+      "spec": "preservation",
+      "specId": 1468
+    },
+    {
+      "class": "hunter",
+      "spec": "beast_mastery",
+      "specId": 253
+    },
+    {
+      "class": "hunter",
+      "spec": "marksmanship",
+      "specId": 254
+    },
+    {
+      "class": "hunter",
+      "spec": "survival",
+      "specId": 255
+    },
+    {
+      "class": "mage",
+      "spec": "arcane",
+      "specId": 62
+    },
+    {
+      "class": "mage",
+      "spec": "fire",
+      "specId": 63
+    },
+    {
+      "class": "mage",
+      "spec": "frost",
+      "specId": 64
+    },
+    {
+      "class": "monk",
+      "spec": "brewmaster",
+      "specId": 268
+    },
+    {
+      "class": "monk",
+      "spec": "mistweaver",
+      "specId": 270
+    },
+    {
+      "class": "monk",
+      "spec": "windwalker",
+      "specId": 269
+    },
+    {
+      "class": "paladin",
+      "spec": "holy",
+      "specId": 65
+    },
+    {
+      "class": "paladin",
+      "spec": "protection",
+      "specId": 66
+    },
+    {
+      "class": "paladin",
+      "spec": "retribution",
+      "specId": 70
+    },
+    {
+      "class": "priest",
+      "spec": "discipline",
+      "specId": 256
+    },
+    {
+      "class": "priest",
+      "spec": "holy",
+      "specId": 257
+    },
+    {
+      "class": "priest",
+      "spec": "shadow",
+      "specId": 258
+    },
+    {
+      "class": "rogue",
+      "spec": "assassination",
+      "specId": 259
+    },
+    {
+      "class": "rogue",
+      "spec": "outlaw",
+      "specId": 260
+    },
+    {
+      "class": "rogue",
+      "spec": "subtlety",
+      "specId": 261
+    },
+    {
+      "class": "shaman",
+      "spec": "elemental",
+      "specId": 262
+    },
+    {
+      "class": "shaman",
+      "spec": "enhancement",
+      "specId": 263
+    },
+    {
+      "class": "shaman",
+      "spec": "restoration",
+      "specId": 264
+    },
+    {
+      "class": "warlock",
+      "spec": "affliction",
+      "specId": 265
+    },
+    {
+      "class": "warlock",
+      "spec": "demonology",
+      "specId": 266
+    },
+    {
+      "class": "warlock",
+      "spec": "destruction",
+      "specId": 267
+    },
+    {
+      "class": "warrior",
+      "spec": "arms",
+      "specId": 71
+    },
+    {
+      "class": "warrior",
+      "spec": "fury",
+      "specId": 72
+    },
+    {
+      "class": "warrior",
+      "spec": "protection",
+      "specId": 73
+    }
+  ]
+}

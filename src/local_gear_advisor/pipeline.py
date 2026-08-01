@@ -17,6 +17,7 @@ from .results import (
 from .runner import ParsedSimcReport, SimcRunError, run_simc
 from .safety import ensure_staging_target
 from .simc_export import MAX_VALID_ITEM_LEVEL, MIN_VALID_ITEM_LEVEL, parse_simc_export
+from .spec_registry import load_spec_registry
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_ADDON = _SOURCE_ROOT / "addon" / "LocalGearAdvisor"
@@ -194,6 +195,12 @@ def analyze_export(
     if report.dbc_source != "Live" or report.game_version != "12.0.7.68887":
         raise SimcRunError(
             f"unsupported SimulationCraft game data: {report.dbc_source} {report.game_version}"
+        )
+    registry_revision = load_spec_registry().source_revision
+    if report.git_revision != registry_revision:
+        raise SimcRunError(
+            f"SimulationCraft git revision {report.git_revision!r} does not match the pinned "
+            f"specialization registry revision {registry_revision!r}"
         )
     wrong_iterations = sorted(
         name for name, count in report.iterations.items() if count != settings.iterations

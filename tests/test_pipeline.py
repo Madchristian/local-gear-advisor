@@ -16,6 +16,14 @@ def _clean_export() -> str:
     )
 
 
+def _druid_guardian_export() -> str:
+    return (
+        _clean_export()
+        .replace('paladin="Testadin"', 'druid="Testadin"')
+        .replace("spec=protection", "spec=guardian")
+    )
+
+
 def _export_with_weapon_candidate() -> str:
     return _clean_export().replace(
         "# head=,id=200001,crafted_stats=36/40,crafting_quality=5\n",
@@ -493,3 +501,78 @@ def test_reported_iteration_mismatch_blocks_publication(tmp_path: Path) -> None:
             staging_target=target,
         )
     assert not target.exists()
+
+
+def test_guardian_druid_export_is_accepted_and_renders_spec_id_104(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+
+    summary = analyze_export(
+        export_text=_druid_guardian_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573600,
+        simc_runner=_fake_report,
+        staging_target=target,
+    )
+
+    assert summary.spec == "guardian"
+    published = target.read_text(encoding="utf-8")
+    assert 'class = "druid"' in published
+    assert 'spec = "guardian"' in published
+    assert "specID = 104" in published
+
+
+def test_unknown_class_spec_pair_fails_closed_before_simulation(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    export = (
+        _clean_export()
+        .replace('paladin="Testadin"', 'warrior="Testadin"')
+        .replace("spec=protection", "spec=made_up_spec")
+    )
+    called = False
+
+    def should_not_run(**kwargs):
+        nonlocal called
+        called = True
+        return _fake_report(**kwargs)
+
+    with pytest.raises(ValueError, match="unsupported class/spec pair"):
+        analyze_export(
+            export_text=export,
+            executable=tmp_path / "simc.exe",
+            settings=SimSettings(),
+            results_path=target,
+            run_root=tmp_path / "runs",
+            simc_runner=should_not_run,
+            staging_target=target,
+        )
+
+    assert not called
+    assert not target.exists()
+
+
+def test_registry_revision_mismatch_blocks_publication_and_preserves_existing_result(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    target.parent.mkdir(parents=True)
+    target.write_text("old verified result", encoding="utf-8")
+
+    def wrong_revision(**kwargs):
+        return replace(_fake_report(**kwargs), git_revision="deadbeef")
+
+    with pytest.raises(Exception, match="registry revision"):
+        analyze_export(
+            export_text=_clean_export(),
+            executable=tmp_path / "simc.exe",
+            settings=SimSettings(iterations=1000),
+            results_path=target,
+            run_root=tmp_path / "runs",
+            generated_at=1785573600,
+            simc_runner=wrong_revision,
+            staging_target=target,
+        )
+
+    assert target.read_text(encoding="utf-8") == "old verified result"

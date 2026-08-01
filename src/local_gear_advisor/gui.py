@@ -101,7 +101,11 @@ def launch() -> None:
     )
     ttk.Label(
         outer,
-        text=f"Staging-Ergebnis: {DEFAULT_RESULTS}\nKeine automatische Installation in WoW.",
+        text=(
+            f"Staging-Ergebnis: {DEFAULT_RESULTS}\n"
+            "Nur offensiver DPS-Vergleich; keine defensive Tank- oder Heilermetrik.\n"
+            "Keine automatische Installation in WoW."
+        ),
         foreground="#666666",
     ).grid(row=8, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
@@ -111,7 +115,7 @@ def launch() -> None:
         analyze_button.configure(state="normal")
         status = (
             f"Fertig: {summary.candidate_count} Items, {summary.variant_count} Varianten, "
-            f"SimC {summary.simc_version}."
+            f"SimC {summary.simc_version}. Nur offensiver DPS-Vergleich."
         )
         if summary.excluded_weapon_count:
             status += (
@@ -131,6 +135,7 @@ def launch() -> None:
         status_var.set(status)
         messagebox.showinfo(
             "Analyse abgeschlossen",
+            "Nur offensiver DPS-Vergleich; keine defensive Tank- oder Heilermetrik.\n\n"
             f"Die geprüfte Results.lua wurde im Projekt erzeugt:\n{summary.results_path}",
             parent=root,
         )

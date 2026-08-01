@@ -47,6 +47,15 @@ def test_tooltip_is_exact_match_and_fails_closed_on_stale_state() -> None:
     assert "local expectedOmnium = results.traitSystems.omnium_talents" in core
     assert 'results.dbcSource ~= "Live"' in core
     assert "BASELINE_SLOTS" in core
+    assert 'dpsOnly = "Nur offensiver DPS-Vergleich"' in core
+    assert 'dpsOnly = "Offensive DPS comparison only"' in core
+    assert 'upgrade = "DPS-Upgrade"' in core
+    assert 'upgrade = "DPS upgrade"' in core
+    assert 'downgrade = "DPS-Downgrade"' in core
+    assert 'downgrade = "DPS downgrade"' in core
+    assert 'equal = "DPS ungefähr gleich"' in core
+    assert 'equal = "DPS approximately equal"' in core
+    assert "tooltip:AddLine(L.dpsOnly" in core
     toc = (ADDON / "LocalGearAdvisor.toc").read_text(encoding="utf-8")
     assert "## Interface: 120007" in toc
     assert "120005" not in toc and "120100" not in toc

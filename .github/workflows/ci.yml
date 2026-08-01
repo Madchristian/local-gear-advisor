@@ -21,11 +21,17 @@ jobs:
       - name: Install project and development dependencies
         run: uv sync --frozen --group dev
       - name: Ruff
-        run: uv run ruff check src tests
+        run: uv run ruff check src tests tools
+      - name: Verify generated specialization registry
+        run: >-
+          uv run python tools/generate_spec_registry.py
+          --revision 5a982a3
+          --source tests/fixtures/sc_specialization_data.inc
+          --check
       - name: Tests
         run: uv run pytest -q
       - name: Compile Python modules
-        run: uv run python -m compileall -q src
+        run: uv run python -m compileall -q src tools
       - name: Build distributions
         run: uv build
       - name: Verify wheel addon assets
@@ -39,9 +45,44 @@ jobs:
               "local_gear_advisor/addon_template/Core.lua",
               "local_gear_advisor/addon_template/LocalGearAdvisor.toc",
               "local_gear_advisor/addon_template/Results.lua",
+              "local_gear_advisor/data/spec_registry.json",
           }
           with zipfile.ZipFile(wheel) as archive:
               names = set(archive.namelist())
           missing = required - names
           if missing:
               raise SystemExit(f"wheel is missing addon assets: {sorted(missing)}")
+      - name: Verify specialization registry from built wheel
+        shell: python
+        run: |
+          import pathlib
+          import sys
+
+          wheel = next(pathlib.Path("dist").glob("*.whl")).resolve()
+          sys.path.insert(0, str(wheel))
+          from local_gear_advisor.spec_registry import load_spec_registry
+
+          registry = load_spec_registry()
+          assert len(registry.specs) == 40
+          assert registry.specs[("druid", "guardian")] == 104
+          assert registry.specs[("demonhunter", "devourer")] == 1480
+      - name: Verify specialization registry from built sdist
+        shell: python
+        run: |
+          import pathlib
+          import subprocess
+          import sys
+
+          sdist = next(pathlib.Path("dist").glob("*.tar.gz")).resolve()
+          target = pathlib.Path(".ci-sdist").resolve()
+          subprocess.run(
+              [sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(target), str(sdist)],
+              check=True,
+          )
+          sys.path.insert(0, str(target))
+          from local_gear_advisor.spec_registry import load_spec_registry
+
+          registry = load_spec_registry()
+          assert len(registry.specs) == 40
+          assert registry.specs[("druid", "guardian")] == 104
+          assert registry.specs[("demonhunter", "devourer")] == 1480

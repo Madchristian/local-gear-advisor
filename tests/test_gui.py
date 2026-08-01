@@ -26,3 +26,4 @@ def test_gui_worker_uses_queue_and_close_guard() -> None:
     assert "Mindest-Itemlevel" in source
     assert "Itemlevel {summary.min_item_level}" in source
     assert "Itemlevel {min_item_level_var.get()}" not in source
+    assert source.count("Nur offensiver DPS-Vergleich") == 3

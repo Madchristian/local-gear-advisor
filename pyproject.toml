@@ -17,6 +17,7 @@ local-gear-advisor = "local_gear_advisor.cli:main"
 
 [tool.hatch.build.targets.wheel.force-include]
 "addon/LocalGearAdvisor" = "local_gear_advisor/addon_template"
+"src/local_gear_advisor/data/spec_registry.json" = "local_gear_advisor/data/spec_registry.json"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{summary.candidate_count} Items / {summary.variant_count} Varianten, "
             f"SimC {summary.simc_version}"
         )
+        print("Hinweis: Nur offensiver DPS-Vergleich; keine defensive Tank- oder Heilermetrik.")
         if summary.excluded_weapon_count:
             weapons = ", ".join(
                 f"{weapon.name or 'item ' + str(weapon.item_id)} "

@@ -2,9 +2,10 @@ local ADDON_NAME = ...
 
 local L = GetLocale() == "deDE" and {
   title = "Lokale Ausrüstungsanalyse",
-  upgrade = "Upgrade",
-  downgrade = "Downgrade",
-  equal = "Ungefähr gleich",
+  upgrade = "DPS-Upgrade",
+  downgrade = "DPS-Downgrade",
+  equal = "DPS ungefähr gleich",
+  dpsOnly = "Nur offensiver DPS-Vergleich",
   stale = "Ergebnis veraltet",
   noProfile = "Keine gültigen Simulationsdaten",
   character = "anderer Charakter",
@@ -23,9 +24,10 @@ local L = GetLocale() == "deDE" and {
   simc = "SimC",
 } or {
   title = "Local gear analysis",
-  upgrade = "Upgrade",
-  downgrade = "Downgrade",
-  equal = "Approximately equal",
+  upgrade = "DPS upgrade",
+  downgrade = "DPS downgrade",
+  equal = "DPS approximately equal",
+  dpsOnly = "Offensive DPS comparison only",
   stale = "Result is stale",
   noProfile = "No valid simulation data",
   character = "different character",
@@ -449,6 +451,7 @@ local function AddResult(tooltip)
 
   tooltip:AddLine(" ")
   tooltip:AddLine(L.title, 0.20, 0.90, 0.85)
+  tooltip:AddLine(L.dpsOnly, 0.95, 0.75, 0.20)
   if type(results.fightStyle) == "string" then
     tooltip:AddDoubleLine(L.scenario, results.fightStyle, 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
   end

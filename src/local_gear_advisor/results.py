@@ -9,15 +9,8 @@ from pathlib import Path
 from .profilesets import BuiltProfileSets, ProfileVariant
 from .runner import ParsedSimcReport, SimcRunError
 from .simc_export import SimcExport
+from .spec_registry import load_spec_registry
 
-_SPEC_IDS = {
-    ("paladin", "holy"): 65,
-    ("paladin", "protection"): 66,
-    ("paladin", "retribution"): 70,
-    ("shaman", "elemental"): 262,
-    ("shaman", "enhancement"): 263,
-    ("shaman", "restoration"): 264,
-}
 _BASELINE_SLOTS = (
     "head",
     "neck",
@@ -128,8 +121,9 @@ def _number(value: float) -> str:
 
 
 def ensure_supported_profile(profile: SimcExport) -> int:
+    registry = load_spec_registry()
     try:
-        return _SPEC_IDS[(profile.character_class, profile.spec)]
+        return registry.specs[(profile.character_class, profile.spec)]
     except KeyError as exc:
         raise ValueError(
             f"unsupported class/spec pair: {profile.character_class}/{profile.spec}"
