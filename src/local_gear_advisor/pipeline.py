@@ -27,6 +27,7 @@ else:
         Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "LocalGearAdvisor"
     )
 PROJECT_STAGING_RESULTS = PROJECT_ROOT / "addon" / "LocalGearAdvisor" / "Results.lua"
+_UNSUPPORTED_TITAN_DISC_BELT_IDS = frozenset({242664, 245964, 245965, 245966})
 _REQUIRED_BASELINE_SLOTS = frozenset(
     {
         "head",
@@ -100,6 +101,14 @@ def analyze_export(
             "weapon candidates are not yet supported safely because "
             "coupled hand changes are required"
         )
+    titan_disc_belts = [
+        item for item in profile.candidates if item.item_id in _UNSUPPORTED_TITAN_DISC_BELT_IDS
+    ]
+    if titan_disc_belts:
+        raise ValueError(
+            "Titan Disc belt candidates are not supported because their tooltip-only "
+            "titan_disc_id cannot be reconstructed safely"
+        )
     if not profile.candidates:
         raise ValueError("SimC export contains no valid bag candidates")
     built = build_profileset_input(profile, settings)
@@ -118,7 +127,7 @@ def analyze_export(
             f"SimulationCraft reported fight style {report.fight_style!r}, "
             f"expected {settings.fight_style!r}"
         )
-    if report.dbc_source != "Live" or not report.game_version.startswith("12.0.7."):
+    if report.dbc_source != "Live" or report.game_version != "12.0.7.68887":
         raise SimcRunError(
             f"unsupported SimulationCraft game data: {report.dbc_source} {report.game_version}"
         )

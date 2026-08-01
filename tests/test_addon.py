@@ -37,6 +37,12 @@ def test_tooltip_is_exact_match_and_fails_closed_on_stale_state() -> None:
     assert "for tooltip in pairs(trackedTooltips)" in core
     assert "tooltip:Hide()" in core
     assert "results.gameVersion" in core
+    assert "IsNonEmptyString(results.profileHash)" in core
+    assert "IsNonEmptyString(results.simcVersion)" in core
+    assert "IsNonEmptyString(results.simcRevision)" in core
+    assert "IsNonEmptyString(results.fightStyle)" in core
+    assert 'type(results.traitSystems.omnium_talents) ~= "string"' in core
+    assert "local expectedOmnium = results.traitSystems.omnium_talents" in core
     assert 'results.dbcSource ~= "Live"' in core
     assert "BASELINE_SLOTS" in core
     toc = (ADDON / "LocalGearAdvisor.toc").read_text(encoding="utf-8")

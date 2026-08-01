@@ -139,6 +139,49 @@ def test_reported_scenario_or_game_data_mismatch_blocks_publication(tmp_path: Pa
     assert not target.exists()
 
 
+def test_exact_wow_build_mismatch_blocks_publication(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+
+    def wrong_build(**kwargs):
+        return replace(_fake_report(**kwargs), game_version="12.0.7.99999")
+
+    with pytest.raises(Exception, match="unsupported SimulationCraft game data"):
+        analyze_export(
+            export_text=_clean_export(),
+            executable=tmp_path / "simc.exe",
+            settings=SimSettings(),
+            results_path=target,
+            run_root=tmp_path / "runs",
+            simc_runner=wrong_build,
+            staging_target=target,
+        )
+    assert not target.exists()
+
+
+def test_titan_disc_belt_candidate_blocks_before_simulation(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    belt_export = _clean_export().replace("id=200001", "id=242664")
+    called = False
+
+    def should_not_run(**kwargs):
+        nonlocal called
+        called = True
+        return _fake_report(**kwargs)
+
+    with pytest.raises(ValueError, match="Titan Disc belt"):
+        analyze_export(
+            export_text=belt_export,
+            executable=tmp_path / "simc.exe",
+            settings=SimSettings(),
+            results_path=target,
+            run_root=tmp_path / "runs",
+            simc_runner=should_not_run,
+            staging_target=target,
+        )
+    assert not called
+    assert not target.exists()
+
+
 def test_reported_iteration_mismatch_blocks_publication(tmp_path: Path) -> None:
     target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
 

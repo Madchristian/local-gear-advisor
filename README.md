@@ -30,7 +30,7 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 ## Voraussetzungen
 
 1. Offizielles SimulationCraft-WoW-Addon `12.0.7-02` für den `/simc`-Export. Andere Serializer-Versionen werden nicht als kompatibel behauptet.
-2. Windows-Version von SimulationCraft für WoW 12.0.7 mit `simc.exe`.
+2. Windows-Version von SimulationCraft für WoW `12.0.7.68887` mit `simc.exe`; andere DBC-/Buildstände werden fail-closed abgelehnt.
 3. Python 3.11+; für die Entwicklung wird `uv` verwendet.
 
 ## Entwicklung
@@ -113,7 +113,7 @@ Die nachvollziehbare MVP-Abnahmematrix steht in [`docs/ACCEPTANCE.md`](docs/ACCE
 ## Sicherheitsmodell
 
 - Die eingelesene SimC-Baseline wird aus einer engen Allowlist rekonstruiert. Doppelte Direktiven, ungültige gebundene Metadaten sowie Output-, Datei-, Include-, Import- und Netzwerkdirektiven werden abgelehnt.
-- Nicht lesbare Taschenzeilen, unvollständige Baseline-Ausrüstung und Waffenkandidaten blockieren den gesamten Lauf; alte `Results.lua`-Daten bleiben unverändert.
+- Nicht lesbare Taschenzeilen, unvollständige Baseline-Ausrüstung, Waffenkandidaten und die nur per Tooltip vollständig serialisierbaren Titan-Disc-Gürtel blockieren den gesamten Lauf; alte `Results.lua`-Daten bleiben unverändert.
 - Subprozesse verwenden eine Argumentliste mit `shell=False`.
 - Ein SimC-Fehler, Timeout, Warn-/Fehlerlog, fehlende Provenienz, abweichendes Szenario, falsche DBC-/WoW-Version, abweichende Iterationszahl, fehlender JSON2-Bericht oder unvollständiges Profileset-Ergebnis blockiert die Veröffentlichung.
 - CLI und GUI dürfen ausschließlich die festgelegte lokale Stagingdatei `addon/LocalGearAdvisor/Results.lua` schreiben. Direkte WoW-/SavedVariables-Ausgabepfade werden nicht akzeptiert.

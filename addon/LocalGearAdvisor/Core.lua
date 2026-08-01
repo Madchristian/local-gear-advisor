@@ -77,6 +77,12 @@ local function IsFiniteNumber(value)
       and value < math.huge
 end
 
+local function IsNonEmptyString(value)
+  return not IsSecret(value)
+      and type(value) == "string"
+      and value:find("%S") ~= nil
+end
+
 local function Tokenize(value)
   if type(value) ~= "string" or IsSecret(value) then return nil end
   value = string.lower(value):gsub(" ", "_")
@@ -236,24 +242,27 @@ local function CheckValidity()
       or not IsFiniteNumber(results.generatedAt)
       or results.generatedAt <= 0
       or results.generatedAt % 1 ~= 0
-      or type(results.characterName) ~= "string"
-      or type(results.region) ~= "string"
-      or type(results.server) ~= "string"
-      or type(results.class) ~= "string"
+      or not IsNonEmptyString(results.characterName)
+      or not IsNonEmptyString(results.region)
+      or not IsNonEmptyString(results.server)
+      or not IsNonEmptyString(results.class)
       or not IsFiniteNumber(results.specID)
       or results.specID % 1 ~= 0
       or not IsFiniteNumber(results.level)
       or results.level % 1 ~= 0
-      or type(results.race) ~= "string"
-      or type(results.talents) ~= "string"
+      or not IsNonEmptyString(results.race)
+      or not IsNonEmptyString(results.talents)
       or type(results.traitSystems) ~= "table"
+      or type(results.traitSystems.omnium_talents) ~= "string"
       or type(results.baselineGear) ~= "table"
-      or type(results.fightStyle) ~= "string"
-      or type(results.simcVersion) ~= "string"
-      or type(results.simcRevision) ~= "string"
-      or type(results.gameVersion) ~= "string"
+      or not IsNonEmptyString(results.fightStyle)
+      or not IsNonEmptyString(results.simcVersion)
+      or not IsNonEmptyString(results.simcRevision)
+      or not IsNonEmptyString(results.gameVersion)
       or results.dbcSource ~= "Live"
-      or type(results.profileHash) ~= "string"
+      or not IsNonEmptyString(results.profileHash)
+      or #results.profileHash ~= 64
+      or not results.profileHash:match("^[0-9a-f]+$")
       or type(results.items) ~= "table" then
     validityOK, validityReason = false, L.noProfile
     return validityOK, validityReason
@@ -340,20 +349,21 @@ local function CheckValidity()
     return validityOK, validityReason
   end
 
-  for optionName, expected in pairs(results.traitSystems or {}) do
+  local expectedOmnium = results.traitSystems.omnium_talents
+  for optionName in pairs(results.traitSystems) do
     if optionName ~= "omnium_talents" then
       validityOK, validityReason = false, L.unknown
       return validityOK, validityReason
     end
-    local current = CurrentTraitString(48)
-    if current == nil then
-      validityOK, validityReason = false, L.unknown
-      return validityOK, validityReason
-    end
-    if current ~= expected then
-      validityOK, validityReason = false, L.traits
-      return validityOK, validityReason
-    end
+  end
+  local currentOmnium = CurrentTraitString(48)
+  if currentOmnium == nil then
+    validityOK, validityReason = false, L.unknown
+    return validityOK, validityReason
+  end
+  if currentOmnium ~= expectedOmnium then
+    validityOK, validityReason = false, L.traits
+    return validityOK, validityReason
   end
 
   for _, slot in ipairs(BASELINE_SLOTS) do
