@@ -24,6 +24,7 @@ def launch() -> None:
 
     simc_var = tk.StringVar()
     iterations_var = tk.IntVar(value=1000)
+    min_item_level_var = tk.IntVar(value=282)
     fight_var = tk.StringVar(value="Patchwerk")
     status_var = tk.StringVar(value="Bereit – beim Start wurden keine Dateien verändert.")
     result_queue: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -56,6 +57,17 @@ def launch() -> None:
     ttk.Spinbox(outer, from_=100, to=1000000, textvariable=iterations_var, width=14).grid(
         row=2, column=1, sticky="w", pady=(10, 0)
     )
+
+    ttk.Label(outer, text="Mindest-Itemlevel (0 = aus)").grid(
+        row=3, column=0, sticky="w", pady=(10, 0)
+    )
+    ttk.Spinbox(
+        outer,
+        from_=0,
+        to=999,
+        textvariable=min_item_level_var,
+        width=14,
+    ).grid(row=3, column=1, sticky="w", pady=(10, 0))
 
     ttk.Label(outer, text="/simc-Export (mit Taschen)").grid(
         row=4, column=0, columnspan=3, sticky="w", pady=(14, 4)
@@ -97,10 +109,26 @@ def launch() -> None:
         nonlocal analysis_running
         analysis_running = False
         analyze_button.configure(state="normal")
-        status_var.set(
+        status = (
             f"Fertig: {summary.candidate_count} Items, {summary.variant_count} Varianten, "
             f"SimC {summary.simc_version}."
         )
+        if summary.excluded_weapon_count:
+            status += (
+                f" {summary.excluded_weapon_count} Waffen-Kandidat(en) ausgeschlossen "
+                "(noch nicht unterstützt, nicht simuliert/veröffentlicht)."
+            )
+        if summary.excluded_below_min_item_level_count:
+            status += (
+                f" {summary.excluded_below_min_item_level_count} Kandidat(en) unter "
+                f"Itemlevel {summary.min_item_level} ausgeschlossen."
+            )
+        if summary.excluded_unknown_item_level_count:
+            status += (
+                f" {summary.excluded_unknown_item_level_count} Kandidat(en) mit "
+                "unbekanntem/ungültigem Itemlevel ausgeschlossen."
+            )
+        status_var.set(status)
         messagebox.showinfo(
             "Analyse abgeschlossen",
             f"Die geprüfte Results.lua wurde im Projekt erzeugt:\n{summary.results_path}",
@@ -132,6 +160,7 @@ def launch() -> None:
             settings = SimSettings(
                 iterations=iterations_var.get(),
                 fight_style=fight_var.get(),
+                min_item_level=min_item_level_var.get(),
             )
         except (ValueError, tk.TclError) as exc:
             messagebox.showwarning("Ungültige Einstellungen", str(exc), parent=root)

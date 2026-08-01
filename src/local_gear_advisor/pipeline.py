@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import resources
 from pathlib import Path
 
@@ -16,7 +16,7 @@ from .results import (
 )
 from .runner import ParsedSimcReport, SimcRunError, run_simc
 from .safety import ensure_staging_target
-from .simc_export import parse_simc_export
+from .simc_export import MAX_VALID_ITEM_LEVEL, MIN_VALID_ITEM_LEVEL, parse_simc_export
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_ADDON = _SOURCE_ROOT / "addon" / "LocalGearAdvisor"
@@ -61,6 +61,14 @@ def _stage_packaged_addon_assets(results_path: Path) -> None:
 
 
 @dataclass(frozen=True)
+class ExcludedCandidate:
+    item_id: int
+    name: str | None
+    slot: str
+    item_level: int | None = None
+
+
+@dataclass(frozen=True)
 class AnalysisSummary:
     character_name: str
     spec: str
@@ -68,6 +76,13 @@ class AnalysisSummary:
     variant_count: int
     simc_version: str
     results_path: Path
+    excluded_weapon_count: int
+    excluded_weapons: tuple[ExcludedCandidate, ...]
+    excluded_below_min_item_level_count: int
+    excluded_below_min_item_level: tuple[ExcludedCandidate, ...]
+    excluded_unknown_item_level_count: int
+    excluded_unknown_item_level: tuple[ExcludedCandidate, ...]
+    min_item_level: int
 
 
 def analyze_export(
@@ -93,14 +108,6 @@ def analyze_export(
     missing_slots = sorted(_REQUIRED_BASELINE_SLOTS - profile.equipped.keys())
     if missing_slots:
         raise ValueError(f"incomplete equipped baseline; missing slots: {', '.join(missing_slots)}")
-    weapon_candidates = [
-        item for item in profile.candidates if item.slot in {"main_hand", "off_hand"}
-    ]
-    if weapon_candidates:
-        raise ValueError(
-            "weapon candidates are not yet supported safely because "
-            "coupled hand changes are required"
-        )
     titan_disc_belts = [
         item for item in profile.candidates if item.item_id in _UNSUPPORTED_TITAN_DISC_BELT_IDS
     ]
@@ -109,7 +116,64 @@ def analyze_export(
             "Titan Disc belt candidates are not supported because their tooltip-only "
             "titan_disc_id cannot be reconstructed safely"
         )
+
+    remaining_candidates = list(profile.candidates)
+    excluded_below_min_by_fingerprint: dict[str, ExcludedCandidate] = {}
+    excluded_unknown_level_by_fingerprint: dict[str, ExcludedCandidate] = {}
+    if settings.min_item_level:
+        kept: list = []
+        for item in remaining_candidates:
+            level = item.item_level
+            if level is None or not (MIN_VALID_ITEM_LEVEL <= level <= MAX_VALID_ITEM_LEVEL):
+                excluded_unknown_level_by_fingerprint.setdefault(
+                    item.fingerprint,
+                    ExcludedCandidate(
+                        item_id=item.item_id, name=item.name, slot=item.slot, item_level=level
+                    ),
+                )
+            elif level < settings.min_item_level:
+                excluded_below_min_by_fingerprint.setdefault(
+                    item.fingerprint,
+                    ExcludedCandidate(
+                        item_id=item.item_id, name=item.name, slot=item.slot, item_level=level
+                    ),
+                )
+            else:
+                kept.append(item)
+        remaining_candidates = kept
+
+    excluded_weapons_by_fingerprint: dict[str, ExcludedCandidate] = {}
+    non_weapon_candidates = []
+    for item in remaining_candidates:
+        if item.slot in {"main_hand", "off_hand"}:
+            excluded_weapons_by_fingerprint.setdefault(
+                item.fingerprint,
+                ExcludedCandidate(
+                    item_id=item.item_id,
+                    name=item.name,
+                    slot=item.slot,
+                    item_level=item.item_level,
+                ),
+            )
+        else:
+            non_weapon_candidates.append(item)
+    profile = replace(profile, candidates=tuple(non_weapon_candidates))
+    excluded_weapons = tuple(excluded_weapons_by_fingerprint.values())
+    excluded_below_min_item_level = tuple(excluded_below_min_by_fingerprint.values())
+    excluded_unknown_item_level = tuple(excluded_unknown_level_by_fingerprint.values())
     if not profile.candidates:
+        reasons = []
+        if excluded_below_min_item_level:
+            reasons.append(
+                f"{len(excluded_below_min_item_level)} below minimum item level "
+                f"{settings.min_item_level}"
+            )
+        if excluded_unknown_item_level:
+            reasons.append(f"{len(excluded_unknown_item_level)} unknown or invalid item level")
+        if excluded_weapons:
+            reasons.append(f"{len(excluded_weapons)} unsupported weapon")
+        if reasons:
+            raise ValueError("no candidates remain after exclusions: " + "; ".join(reasons))
         raise ValueError("SimC export contains no valid bag candidates")
     built = build_profileset_input(profile, settings)
     if not built.variants:
@@ -153,4 +217,11 @@ def analyze_export(
         variant_count=len(built.variants),
         simc_version=report.simc_version,
         results_path=results_path.resolve(),
+        excluded_weapon_count=len(excluded_weapons),
+        excluded_weapons=excluded_weapons,
+        excluded_below_min_item_level_count=len(excluded_below_min_item_level),
+        excluded_below_min_item_level=excluded_below_min_item_level,
+        excluded_unknown_item_level_count=len(excluded_unknown_item_level),
+        excluded_unknown_item_level=excluded_unknown_item_level,
+        min_item_level=settings.min_item_level,
     )

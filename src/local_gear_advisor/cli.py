@@ -19,6 +19,12 @@ def _parser() -> argparse.ArgumentParser:
     analyze.add_argument("--simc", type=Path, required=True)
     analyze.add_argument("--iterations", type=int, default=1000)
     analyze.add_argument(
+        "--min-item-level",
+        type=int,
+        default=282,
+        help="minimum candidate item level; 0 disables the filter (default: 282)",
+    )
+    analyze.add_argument(
         "--fight-style", choices=("Patchwerk", "DungeonSlice"), default="Patchwerk"
     )
     analyze.add_argument("--timeout", type=int, default=900)
@@ -41,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
                 settings=SimSettings(
                     iterations=args.iterations,
                     fight_style=args.fight_style,
+                    min_item_level=args.min_item_level,
                 ),
                 results_path=DEFAULT_RESULTS,
                 run_root=DEFAULT_RUN_ROOT,
@@ -54,6 +61,28 @@ def main(argv: list[str] | None = None) -> int:
             f"{summary.candidate_count} Items / {summary.variant_count} Varianten, "
             f"SimC {summary.simc_version}"
         )
+        if summary.excluded_weapon_count:
+            weapons = ", ".join(
+                f"{weapon.name or 'item ' + str(weapon.item_id)} "
+                f"(id={weapon.item_id}, {weapon.slot})"
+                for weapon in summary.excluded_weapons
+            )
+            print(
+                f"Ausgeschlossen: {summary.excluded_weapon_count} Waffen-Kandidat(en) "
+                f"noch nicht unterstützt, nicht simuliert/veröffentlicht: {weapons}"
+            )
+        if summary.excluded_below_min_item_level_count:
+            print(
+                "Ausgeschlossen: "
+                f"{summary.excluded_below_min_item_level_count} Kandidat(en) unter "
+                f"Itemlevel {summary.min_item_level}."
+            )
+        if summary.excluded_unknown_item_level_count:
+            print(
+                "Ausgeschlossen: "
+                f"{summary.excluded_unknown_item_level_count} Kandidat(en) mit "
+                "unbekanntem oder ungültigem Itemlevel."
+            )
         print(f"Ergebnis: {summary.results_path}")
         return 0
     return 2

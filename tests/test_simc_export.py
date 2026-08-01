@@ -26,6 +26,24 @@ def test_parse_export_separates_equipped_gear_and_bag_candidates() -> None:
     assert profile.candidates[0].options == ",id=200101,gem_id=3001/0/3002,bonus_id=50/51"
 
 
+def test_parse_item_level_from_trailing_numeric_comment_suffix() -> None:
+    profile = parse_simc_export(FIXTURE.read_text(encoding="utf-8"))
+
+    assert profile.candidates[0].item_level == 253
+    assert profile.candidates[1].item_level == 256
+    assert profile.candidates[2].item_level == 256
+
+
+def test_item_level_is_none_when_name_has_no_trailing_ilvl_suffix() -> None:
+    text = FIXTURE.read_text(encoding="utf-8").replace(
+        "# Candidate Trinket (256)", "# Candidate Trinket"
+    )
+    profile = parse_simc_export(text)
+
+    trinket = next(candidate for candidate in profile.candidates if candidate.item_id == 200201)
+    assert trinket.item_level is None
+
+
 def test_parse_export_excludes_commented_bag_lines_from_baseline() -> None:
     profile = parse_simc_export(FIXTURE.read_text(encoding="utf-8"))
 

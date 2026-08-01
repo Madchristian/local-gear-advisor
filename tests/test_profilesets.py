@@ -1,9 +1,30 @@
 from pathlib import Path
 
+import pytest
+
 from local_gear_advisor.profilesets import SimSettings, build_profileset_input
 from local_gear_advisor.simc_export import parse_simc_export
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample.simc"
+
+
+def test_min_item_level_defaults_to_disabled() -> None:
+    assert SimSettings().min_item_level == 0
+
+
+def test_min_item_level_negative_is_rejected() -> None:
+    with pytest.raises(ValueError, match="min_item_level"):
+        SimSettings(min_item_level=-1)
+
+
+def test_min_item_level_above_sane_bound_is_rejected() -> None:
+    with pytest.raises(ValueError, match="min_item_level"):
+        SimSettings(min_item_level=1000)
+
+
+def test_min_item_level_zero_and_positive_values_are_accepted() -> None:
+    assert SimSettings(min_item_level=0).min_item_level == 0
+    assert SimSettings(min_item_level=282).min_item_level == 282
 
 
 def _build():

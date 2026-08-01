@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from .simc_export import ItemSpec, SimcExport
+from .simc_export import MAX_VALID_ITEM_LEVEL, ItemSpec, SimcExport
 
 _DUAL_SLOTS = {
     "finger1": ("finger1", "finger2"),
@@ -19,6 +19,7 @@ class SimSettings:
     iterations: int = 1000
     fight_style: str = "Patchwerk"
     profileset_work_threads: int = 1
+    min_item_level: int = 0
 
     def __post_init__(self) -> None:
         if not 100 <= self.iterations <= 1_000_000:
@@ -27,6 +28,10 @@ class SimSettings:
             raise ValueError(f"unsupported fight style: {self.fight_style}")
         if self.profileset_work_threads < 1:
             raise ValueError("profileset_work_threads must be positive")
+        if not 0 <= self.min_item_level <= MAX_VALID_ITEM_LEVEL:
+            raise ValueError(
+                f"min_item_level must be between 0 (disabled) and {MAX_VALID_ITEM_LEVEL}"
+            )
 
 
 @dataclass(frozen=True)

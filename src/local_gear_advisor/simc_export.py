@@ -29,6 +29,9 @@ EQUIPMENT_SLOTS = frozenset(
 )
 _ITEM_RE = re.compile(r"^(?P<slot>[a-z0-9_]+)=(?P<options>.*)$")
 _ITEM_ID_RE = re.compile(r"(?:^|,)id=(?P<item_id>\d+)(?:,|$)")
+_ITEM_LEVEL_RE = re.compile(r"\((\d+)\)\s*$")
+MIN_VALID_ITEM_LEVEL = 1
+MAX_VALID_ITEM_LEVEL = 999
 _ACTOR_RE = re.compile(r'^([a-z][a-z0-9_]*)="([^"]+)"$')
 _WOW_CLASSES = frozenset(
     {
@@ -80,6 +83,7 @@ class ItemSpec:
     options: str
     item_id: int
     name: str | None
+    item_level: int | None
     fingerprint: str
 
 
@@ -115,11 +119,17 @@ def _parse_item(line: str, name: str | None) -> ItemSpec | None:
     item_match = _ITEM_ID_RE.search(options)
     if not item_match:
         return None
+    item_level = None
+    if name is not None:
+        level_match = _ITEM_LEVEL_RE.search(name)
+        if level_match:
+            item_level = int(level_match.group(1))
     return ItemSpec(
         slot=match.group("slot"),
         options=options,
         item_id=int(item_match.group("item_id")),
         name=name,
+        item_level=item_level,
         fingerprint=hashlib.sha256(options.encode("utf-8")).hexdigest(),
     )
 

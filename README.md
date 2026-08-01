@@ -9,7 +9,8 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 - Schutz-Paladin und Elementar-Schamane sowie die übrigen Paladin-/Schamanen-Specs im Ergebnisformat
 - Tooltip-Addon gezielt für WoW Retail 12.0.7 und das offizielle SimulationCraft-Addon 12.0.7-02
 - Ringe und Schmuckstücke werden gegen beide Plätze getestet
-- andere Taschengegenstände gegen ihren jeweiligen Slot; Waffenkandidaten werden im MVP fail-closed abgelehnt
+- konfigurierbarer Mindest-Itemlevel-Filter (GUI/CLI standardmäßig 282); angelegte Baseline-Ausrüstung wird nie gefiltert
+- andere Kandidaten gegen ihren jeweiligen Slot; Waffenkandidaten werden transparent ausgeschlossen und nie simuliert oder veröffentlicht
 - echte SimC-DPS-Vergleiche einschließlich von SimC modellierter Procs, Spezialeffekte, Talente und Setboni
 - exakte Kandidatenidentität über die vom offiziellen SimulationCraft-Addon erzeugten Itemoptionen
 - Gültigkeitsprüfung im Spiel gegen Charakter, Realm, Region, Stufe, Volk, Spec, Talentstring, Omnium-Talente und alle relevanten Ausrüstungsslots
@@ -79,7 +80,8 @@ In der GUI:
 2. In WoW `/simc` ausführen; nicht `nobags` verwenden.
 3. Den gesamten Export einfügen oder aus einer UTF-8-Datei laden.
 4. `Patchwerk` für Single Target oder `DungeonSlice` als experimentelles M+-Szenario auswählen.
-5. „Lokal analysieren“ drücken.
+5. Mindest-Itemlevel festlegen (`282` ist Standard, `0` deaktiviert den Filter).
+6. „Lokal analysieren“ drücken.
 
 Das Ergebnis wird ausschließlich im jeweiligen Staging-Verzeichnis erzeugt. Im Repository ist das:
 
@@ -96,6 +98,7 @@ Es erfolgt keine automatische Installation in den WoW-Ordner.
   --input character.simc \
   --simc "C:/SimulationCraft/simc.exe" \
   --iterations 1000 \
+  --min-item-level 282 \
   --fight-style Patchwerk
 ```
 
@@ -113,7 +116,8 @@ Die nachvollziehbare MVP-Abnahmematrix steht in [`docs/ACCEPTANCE.md`](docs/ACCE
 ## Sicherheitsmodell
 
 - Die eingelesene SimC-Baseline wird aus einer engen Allowlist rekonstruiert. Doppelte Direktiven, ungültige gebundene Metadaten sowie Output-, Datei-, Include-, Import- und Netzwerkdirektiven werden abgelehnt.
-- Nicht lesbare Taschenzeilen, unvollständige Baseline-Ausrüstung, Waffenkandidaten und die nur per Tooltip vollständig serialisierbaren Titan-Disc-Gürtel blockieren den gesamten Lauf; alte `Results.lua`-Daten bleiben unverändert.
+- Nicht lesbare Taschenzeilen, unvollständige Baseline-Ausrüstung und die nur per Tooltip vollständig serialisierbaren Titan-Disc-Gürtel blockieren den gesamten Lauf; alte `Results.lua`-Daten bleiben unverändert.
+- Bei aktiviertem Filter werden Kandidaten unterhalb des gewählten Mindest-Itemlevels oder mit unbekanntem Itemlevel zuerst nach Fingerprint dedupliziert und ausgeschlossen. Verbleibende Waffen-Slots werden anschließend als nicht unterstützt gemeldet. Keine dieser Kategorien wird simuliert oder in `Results.lua` veröffentlicht.
 - Subprozesse verwenden eine Argumentliste mit `shell=False`.
 - Ein SimC-Fehler, Timeout, Warn-/Fehlerlog, fehlende Provenienz, abweichendes Szenario, falsche DBC-/WoW-Version, abweichende Iterationszahl, fehlender JSON2-Bericht oder unvollständiges Profileset-Ergebnis blockiert die Veröffentlichung.
 - CLI und GUI dürfen ausschließlich die festgelegte lokale Stagingdatei `addon/LocalGearAdvisor/Results.lua` schreiben. Direkte WoW-/SavedVariables-Ausgabepfade werden nicht akzeptiert.
