@@ -75,6 +75,7 @@ def test_duplicate_profile_directives_are_rejected() -> None:
 @pytest.mark.parametrize(
     ("old", "new"),
     [
+        ('paladin="Testadin"', 'paladin="bad;name"'),
         ("region=eu", "region=evil"),
         ("server=testrealm", "server=x;html=C:/unsafe"),
         ("level=90", "level=999"),

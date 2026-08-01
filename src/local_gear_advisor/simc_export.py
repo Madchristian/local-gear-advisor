@@ -66,6 +66,7 @@ _SAFE_PROFILE_OPTIONS = frozenset(
 _UNSAFE_PROFILE_VALUE_RE = re.compile(r'[";\\|<>\x00-\x1f]')
 _TOKEN_RE = re.compile(r"^[a-z0-9_]+$")
 _SERVER_RE = re.compile(r"^[\w\u0080-\uffff.+%-]+$")
+_CHARACTER_NAME_RE = re.compile(r"^[\w\u0080-\uffff'+.-]+$")
 _TALENT_RE = re.compile(r"^[A-Za-z0-9+./=_-]+$")
 _TRAIT_RE = re.compile(r"^(?:\d+:\d+(?:/\d+:\d+)*)?$")
 _VALID_REGIONS = frozenset({"us", "eu", "kr", "tw", "cn"})
@@ -144,6 +145,8 @@ def parse_simc_export(text: str) -> SimcExport:
         if actor_match and actor_match.group(1) in _WOW_CLASSES:
             if actor is not None:
                 raise ValueError("SimC export contains more than one character actor")
+            if not _CHARACTER_NAME_RE.fullmatch(actor_match.group(2)):
+                raise ValueError("SimC export contains an invalid character name")
             actor = actor_match
             base_lines.append(stripped)
             continue
