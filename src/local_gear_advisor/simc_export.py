@@ -206,8 +206,17 @@ def parse_simc_export(text: str) -> SimcExport:
         for index in range(bag_marker + 1, len(lines)):
             raw = lines[index]
             if raw.startswith("###"):
+                if pending_name is not None:
+                    warnings.append(
+                        ParseWarning(index + 1, "Candidate description has no item line", raw)
+                    )
+                    pending_name = None
                 break
             if raw == "#":
+                if pending_name is not None:
+                    warnings.append(
+                        ParseWarning(index + 1, "Candidate description has no item line", raw)
+                    )
                 pending_name = None
                 continue
             if not raw.startswith("# "):
@@ -228,6 +237,10 @@ def parse_simc_export(text: str) -> SimcExport:
                 pending_name = None
             elif pending_name is None:
                 pending_name = content
+        if pending_name is not None:
+            warnings.append(
+                ParseWarning(len(lines), "Candidate description has no item line", pending_name)
+            )
 
     return SimcExport(
         character_class=actor.group(1),

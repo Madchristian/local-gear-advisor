@@ -51,6 +51,16 @@ def test_parse_warns_on_unsupported_candidate_slot() -> None:
     assert any("unsupported equipment slot" in warning.message for warning in profile.warnings)
 
 
+def test_parse_warns_when_candidate_name_has_no_item_line() -> None:
+    text = FIXTURE.read_text(encoding="utf-8").replace(
+        "### Weekly Reward Choices",
+        "#\n# Missing Candidate Line\n#\n### Weekly Reward Choices",
+    )
+    profile = parse_simc_export(text)
+
+    assert any("description has no item line" in warning.message for warning in profile.warnings)
+
+
 def test_exact_candidate_identity_changes_with_bonus_ids() -> None:
     text = FIXTURE.read_text(encoding="utf-8")
     first = parse_simc_export(text).candidates[0]
