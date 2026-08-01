@@ -417,8 +417,10 @@ eventFrame:SetScript("OnEvent", function()
 end)
 
 local function AddResult(tooltip)
-  local _, itemLink = tooltip:GetItem()
-  if IsSecret(itemLink) or type(itemLink) ~= "string" then return end
+  local getItem = tooltip.GetItem
+  if type(getItem) ~= "function" then return end
+  local ok, _, itemLink = pcall(getItem, tooltip)
+  if not ok or IsSecret(itemLink) or type(itemLink) ~= "string" then return end
   if not tooltip.__LocalGearAdvisorClearHook then
     tooltip.__LocalGearAdvisorClearHook = true
     tooltip:HookScript("OnTooltipCleared", function(owner)

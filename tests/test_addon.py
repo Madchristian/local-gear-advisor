@@ -17,6 +17,8 @@ def test_results_load_before_tooltip_core() -> None:
 
 def test_tooltip_is_exact_match_and_fails_closed_on_stale_state() -> None:
     core = (ADDON / "Core.lua").read_text(encoding="utf-8")
+    assert "local getItem = tooltip.GetItem" in core
+    assert "pcall(getItem, tooltip)" in core
     assert "results.items[options]" in core
     assert "C_Traits.GenerateImportString" in core
     assert "results.baselineGear" in core
