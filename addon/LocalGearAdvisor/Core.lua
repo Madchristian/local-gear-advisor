@@ -69,6 +69,14 @@ local function IsSecret(value)
   return issecretvalue and issecretvalue(value)
 end
 
+local function IsFiniteNumber(value)
+  return not IsSecret(value)
+      and type(value) == "number"
+      and value == value
+      and value > -math.huge
+      and value < math.huge
+end
+
 local function Tokenize(value)
   if type(value) ~= "string" or IsSecret(value) then return nil end
   value = string.lower(value):gsub(" ", "_")
@@ -219,23 +227,23 @@ local function CurrentTraitString(systemID)
   return table.concat(entries, "/")
 end
 
-local validityDirty = true
 local validityOK, validityReason = false, L.noProfile
 
 local function CheckValidity()
-  if not validityDirty then return validityOK, validityReason end
-  validityDirty = false
   local results = LocalGearAdvisorResults
   if type(results) ~= "table"
       or results.schemaVersion ~= 1
-      or type(results.generatedAt) ~= "number"
+      or not IsFiniteNumber(results.generatedAt)
       or results.generatedAt <= 0
+      or results.generatedAt % 1 ~= 0
       or type(results.characterName) ~= "string"
       or type(results.region) ~= "string"
       or type(results.server) ~= "string"
       or type(results.class) ~= "string"
-      or type(results.specID) ~= "number"
-      or type(results.level) ~= "number"
+      or not IsFiniteNumber(results.specID)
+      or results.specID % 1 ~= 0
+      or not IsFiniteNumber(results.level)
+      or results.level % 1 ~= 0
       or type(results.race) ~= "string"
       or type(results.talents) ~= "string"
       or type(results.traitSystems) ~= "table"
@@ -251,7 +259,7 @@ local function CheckValidity()
     return validityOK, validityReason
   end
   local now = time()
-  if type(now) ~= "number" or results.generatedAt > now + 300 then
+  if not IsFiniteNumber(now) or results.generatedAt > now + 300 then
     validityOK, validityReason = false, L.unknown
     return validityOK, validityReason
   end
@@ -274,8 +282,14 @@ local function CheckValidity()
   local _, classFile = UnitClass("player")
   local _, raceFile = UnitRace("player")
   local level = UnitLevel("player")
-  local specIndex = GetSpecialization()
-  local specID = specIndex and GetSpecializationInfo(specIndex)
+  local specAPI = C_SpecializationInfo
+  local specIndex = specAPI and specAPI.GetSpecialization and specAPI.GetSpecialization()
+  if not specAPI or not specAPI.GetSpecializationInfo
+      or IsSecret(specIndex) or type(specIndex) ~= "number" then
+    validityOK, validityReason = false, L.unknown
+    return validityOK, validityReason
+  end
+  local specID = specAPI.GetSpecializationInfo(specIndex)
   if IsSecret(name) or IsSecret(classFile) or IsSecret(raceFile)
       or IsSecret(level) or IsSecret(specID) then
     validityOK, validityReason = false, L.unknown
@@ -285,7 +299,12 @@ local function CheckValidity()
     validityOK, validityReason = false, L.character
     return validityOK, validityReason
   end
-  local realm = Tokenize(GetRealmName())
+  local realmName = GetRealmName()
+  if IsSecret(realmName) or type(realmName) ~= "string" then
+    validityOK, validityReason = false, L.unknown
+    return validityOK, validityReason
+  end
+  local realm = Tokenize(realmName)
   local regionID = GetCurrentRegion and GetCurrentRegion()
   if IsSecret(regionID) then regionID = nil end
   local region = regionID and REGION_NAMES[regionID]
@@ -369,22 +388,21 @@ local function CheckValidity()
   return validityOK, validityReason
 end
 
+local trackedTooltips = setmetatable({}, { __mode = "k" })
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 eventFrame:RegisterEvent("TRAIT_CONFIG_LIST_UPDATED")
 eventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
 eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 eventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
-eventFrame:SetScript("OnEvent", function(_, event)
-  validityDirty = true
-  local itemDataEvent = event == "GET_ITEM_INFO_RECEIVED" or event == "ITEM_DATA_LOAD_RESULT"
-  for _, tooltip in ipairs({ GameTooltip, ItemRefTooltip }) do
-    if tooltip and tooltip.__LocalGearAdvisorLink then
-      tooltip.__LocalGearAdvisorLink = nil
-      if not itemDataEvent then tooltip:Hide() end
-    end
+eventFrame:SetScript("OnEvent", function()
+  for tooltip in pairs(trackedTooltips) do
+    tooltip.__LocalGearAdvisorLink = nil
+    trackedTooltips[tooltip] = nil
+    tooltip:Hide()
   end
 end)
 
@@ -395,6 +413,7 @@ local function AddResult(tooltip)
     tooltip.__LocalGearAdvisorClearHook = true
     tooltip:HookScript("OnTooltipCleared", function(owner)
       owner.__LocalGearAdvisorLink = nil
+      trackedTooltips[owner] = nil
     end)
   end
   if tooltip.__LocalGearAdvisorLink == itemLink then return end
@@ -405,21 +424,25 @@ local function AddResult(tooltip)
   local result = results.items[options]
   if type(result) ~= "table"
       or result.status ~= "simulated"
-      or type(result.deltaPercent) ~= "number"
-      or result.deltaPercent ~= result.deltaPercent
+      or not IsFiniteNumber(result.deltaPercent)
       or type(result.bestSlot) ~= "string"
-      or type(result.iterations) ~= "number" then
+      or not SLOT_IDS[result.bestSlot]
+      or not IsFiniteNumber(result.iterations)
+      or result.iterations <= 0
+      or result.iterations % 1 ~= 0 then
     return
   end
   tooltip.__LocalGearAdvisorLink = itemLink
+  trackedTooltips[tooltip] = true
 
   tooltip:AddLine(" ")
   tooltip:AddLine(L.title, 0.20, 0.90, 0.85)
   if type(results.fightStyle) == "string" then
     tooltip:AddDoubleLine(L.scenario, results.fightStyle, 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
   end
-  if type(results.generatedAt) == "number" then
-    local age = math.max(0, time() - results.generatedAt)
+  local now = time()
+  if IsFiniteNumber(results.generatedAt) and IsFiniteNumber(now) then
+    local age = math.max(0, now - results.generatedAt)
     tooltip:AddDoubleLine(L.age, AgeText(age), 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
   end
   if type(results.simcVersion) == "string" then

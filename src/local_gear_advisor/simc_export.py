@@ -63,6 +63,14 @@ _SAFE_PROFILE_OPTIONS = frozenset(
         "source",
     }
 )
+_UNSAFE_PROFILE_VALUE_RE = re.compile(r'[";\\|<>\x00-\x1f]')
+_TOKEN_RE = re.compile(r"^[a-z0-9_]+$")
+_SERVER_RE = re.compile(r"^[\w\u0080-\uffff.+%-]+$")
+_TALENT_RE = re.compile(r"^[A-Za-z0-9+./=_-]+$")
+_TRAIT_RE = re.compile(r"^(?:\d+:\d+(?:/\d+:\d+)*)?$")
+_VALID_REGIONS = frozenset({"us", "eu", "kr", "tw", "cn"})
+_MAX_EXPORT_BYTES = 2 * 1024 * 1024
+_MAX_EXPORT_LINES = 20_000
 
 
 @dataclass(frozen=True)
@@ -118,10 +126,15 @@ def _parse_item(line: str, name: str | None) -> ItemSpec | None:
 def parse_simc_export(text: str) -> SimcExport:
     """Parse the official addon's active profile and commented bag candidates."""
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    if len(normalized.encode("utf-8")) > _MAX_EXPORT_BYTES:
+        raise ValueError("SimC export exceeds the 2 MiB safety limit")
     lines = normalized.splitlines()
+    if len(lines) > _MAX_EXPORT_LINES:
+        raise ValueError("SimC export exceeds the 20,000-line safety limit")
     bag_marker = next((i for i, line in enumerate(lines) if line == "### Gear from Bags"), None)
     raw_base_lines = lines if bag_marker is None else lines[:bag_marker]
     base_lines: list[str] = []
+    seen_directives: set[str] = set()
     actor = None
     for index, raw in enumerate(raw_base_lines, 1):
         stripped = raw.strip()
@@ -137,6 +150,11 @@ def parse_simc_export(text: str) -> SimcExport:
         if "=" not in stripped:
             raise ValueError(f"unsafe or unsupported SimC directive on line {index}: {stripped}")
         key, _, value = stripped.partition("=")
+        if key in seen_directives:
+            raise ValueError(f"duplicate SimC directive on line {index}: {key}")
+        seen_directives.add(key)
+        if (not value and key != "omnium_talents") or _UNSAFE_PROFILE_VALUE_RE.search(value):
+            raise ValueError(f"unsafe or invalid SimC value on line {index}: {key}")
         if key in EQUIPMENT_SLOTS:
             if _parse_item(stripped, None) is None:
                 raise ValueError(f"equipped item line {index} has no valid item id")
@@ -169,21 +187,24 @@ def parse_simc_export(text: str) -> SimcExport:
     server = base_option("server")
     race = base_option("race")
     level_text = base_option("level")
-    if not region or not server:
-        raise ValueError("SimC export does not contain region= and server=")
-    if not race or not level_text.isdigit() or int(level_text) <= 0:
+    if region not in _VALID_REGIONS or not _SERVER_RE.fullmatch(server):
+        raise ValueError("SimC export does not contain valid region= and server=")
+    if not _TOKEN_RE.fullmatch(race) or not level_text.isdigit() or not 1 <= int(level_text) <= 90:
         raise ValueError("SimC export does not contain valid race= and level=")
     level = int(level_text)
     talents = base_option("talents")
-    if not talents:
-        raise ValueError("SimC export does not contain active talents=")
+    if not talents or not _TALENT_RE.fullmatch(talents):
+        raise ValueError("SimC export does not contain valid active talents=")
     trait_systems: dict[str, str] = {}
     for line in base_lines:
         if line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        if key != "talents" and key.endswith("_talents") and value.strip():
-            trait_systems[key] = value.strip()
+        if key != "talents" and key.endswith("_talents"):
+            value = value.strip()
+            if not _TRAIT_RE.fullmatch(value):
+                raise ValueError(f"SimC export contains invalid {key}=")
+            trait_systems[key] = value
     trait_systems.setdefault("omnium_talents", "")
 
     equipped: dict[str, ItemSpec] = {}

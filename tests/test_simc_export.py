@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from local_gear_advisor.simc_export import parse_simc_export
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample.simc"
@@ -59,6 +61,32 @@ def test_parse_warns_when_candidate_name_has_no_item_line() -> None:
     profile = parse_simc_export(text)
 
     assert any("description has no item line" in warning.message for warning in profile.warnings)
+
+
+def test_duplicate_profile_directives_are_rejected() -> None:
+    text = FIXTURE.read_text(encoding="utf-8").replace(
+        "spec=protection", "spec=protection\nspec=retribution"
+    )
+
+    with pytest.raises(ValueError, match="duplicate SimC directive.*spec"):
+        parse_simc_export(text)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("region=eu", "region=evil"),
+        ("server=testrealm", "server=x;html=C:/unsafe"),
+        ("level=90", "level=999"),
+        ("talents=CYQA...", "talents=bad;html=C:/unsafe"),
+        ("omnium_talents=100:1/200:1", "omnium_talents=bogus"),
+    ],
+)
+def test_invalid_or_unsafe_bound_profile_values_are_rejected(old: str, new: str) -> None:
+    text = FIXTURE.read_text(encoding="utf-8").replace(old, new)
+
+    with pytest.raises(ValueError):
+        parse_simc_export(text)
 
 
 def test_exact_candidate_identity_changes_with_bonus_ids() -> None:

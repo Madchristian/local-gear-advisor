@@ -26,3 +26,22 @@ jobs:
         run: uv run pytest -q
       - name: Compile Python modules
         run: uv run python -m compileall -q src
+      - name: Build distributions
+        run: uv build
+      - name: Verify wheel addon assets
+        shell: python
+        run: |
+          import pathlib
+          import zipfile
+
+          wheel = next(pathlib.Path("dist").glob("*.whl"))
+          required = {
+              "local_gear_advisor/addon_template/Core.lua",
+              "local_gear_advisor/addon_template/LocalGearAdvisor.toc",
+              "local_gear_advisor/addon_template/Results.lua",
+          }
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          missing = required - names
+          if missing:
+              raise SystemExit(f"wheel is missing addon assets: {sorted(missing)}")

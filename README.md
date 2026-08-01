@@ -99,9 +99,20 @@ Es erfolgt keine automatische Installation in den WoW-Ordner.
   --fight-style Patchwerk
 ```
 
+## Tests und Abnahme
+
+```text
+uv run ruff format --check src tests
+uv run ruff check src tests
+uv run pytest -q
+uv build
+```
+
+Die nachvollziehbare MVP-Abnahmematrix steht in [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md). Sie trennt automatisierte Nachweise ausdrücklich von der noch ausstehenden persönlichen `/simc`- und In-Game-Abnahme.
+
 ## Sicherheitsmodell
 
-- Die eingelesene SimC-Baseline wird aus einer engen Allowlist rekonstruiert. Output-, Datei-, Include-, Import- und Netzwerkdirektiven werden abgelehnt.
+- Die eingelesene SimC-Baseline wird aus einer engen Allowlist rekonstruiert. Doppelte Direktiven, ungültige gebundene Metadaten sowie Output-, Datei-, Include-, Import- und Netzwerkdirektiven werden abgelehnt.
 - Nicht lesbare Taschenzeilen, unvollständige Baseline-Ausrüstung und Waffenkandidaten blockieren den gesamten Lauf; alte `Results.lua`-Daten bleiben unverändert.
 - Subprozesse verwenden eine Argumentliste mit `shell=False`.
 - Ein SimC-Fehler, Timeout, Warn-/Fehlerlog, fehlende Provenienz, abweichendes Szenario, falsche DBC-/WoW-Version, abweichende Iterationszahl, fehlender JSON2-Bericht oder unvollständiges Profileset-Ergebnis blockiert die Veröffentlichung.

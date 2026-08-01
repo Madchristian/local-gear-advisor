@@ -27,6 +27,15 @@ def test_tooltip_is_exact_match_and_fails_closed_on_stale_state() -> None:
     assert '"suffix=" .. suffixID' in core
     assert "redirected_base_stats" not in core
     assert "MAX_RESULT_AGE" in core
+    assert "if not validityDirty then" not in core
+    assert 'RegisterEvent("PLAYER_LEVEL_UP")' in core
+    assert "IsFiniteNumber(results.generatedAt)" in core
+    assert "IsFiniteNumber(result.iterations)" in core
+    assert "local specAPI = C_SpecializationInfo" in core
+    assert "specAPI.GetSpecialization()" in core
+    assert "local trackedTooltips = setmetatable" in core
+    assert "for tooltip in pairs(trackedTooltips)" in core
+    assert "tooltip:Hide()" in core
     assert "results.gameVersion" in core
     assert 'results.dbcSource ~= "Live"' in core
     assert "BASELINE_SLOTS" in core
