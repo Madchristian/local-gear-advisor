@@ -1,0 +1,63 @@
+# Test fixture derived from the official SimulationCraft addon output structure.
+# Testadin - Protection - 2026-07-31 20:00 - eu/testrealm
+# SimC Addon 12.1.0
+# WoW 12.0.7.12345, TOC 120007
+
+paladin="Testadin"
+level=90
+race=maghar_orc
+region=eu
+server=testrealm
+role=tank
+spec=protection
+
+talents=CYQA...
+omnium_talents=100:1/200:1
+
+# Equipped Helm (250)
+head=,id=100001,bonus_id=1/2
+neck=,id=100002
+shoulder=,id=100003
+back=,id=100004
+chest=,id=100005
+wrist=,id=100006
+hands=,id=100007
+waist=,id=100008
+legs=,id=100009
+feet=,id=100010
+# Equipped Ring One (250)
+finger1=,id=100101,enchant_id=7001,bonus_id=10/20
+# Equipped Ring Two (247)
+finger2=,id=100102,bonus_id=11/21
+# Equipped Trinket One (250)
+trinket1=,id=100201,bonus_id=30
+# Equipped Trinket Two (250)
+trinket2=,id=100202,bonus_id=31
+# Equipped Weapon (250)
+main_hand=,id=100300,bonus_id=39
+# Equipped Shield (250)
+off_hand=,id=100301,bonus_id=40
+
+### Gear from Bags
+#
+# Candidate Ring (253)
+# upgrade_levels=2:3:c#1#2#0:
+# finger1=,id=200101,gem_id=3001/0/3002,bonus_id=50/51
+#
+# Candidate Trinket (256)
+# trinket1=,id=200201,bonus_id=60,drop_level=90
+#
+# Candidate Helm (256)
+# head=,id=200001,crafted_stats=36/40,crafting_quality=5
+#
+# Malformed Candidate
+# head=this_has_no_item_id
+
+### Weekly Reward Choices
+#
+# Weekly Ring (259)
+# finger1=,id=300101,bonus_id=70
+### End of Weekly Reward Choices
+
+### Additional Character Info
+# Checksum: deadbeef

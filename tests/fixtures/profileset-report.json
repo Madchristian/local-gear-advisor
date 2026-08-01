@@ -1,0 +1,31 @@
+{
+  "version": "1205-01",
+  "report_version": "2.0.0",
+  "git_revision": "5a982a3",
+  "sim": {
+    "options": {
+      "fight_style": "Patchwerk",
+      "profileset_metric": "dps",
+      "dbc": {
+        "Live": {"wow_version": "12.0.7.68887"},
+        "version_used": "Live"
+      }
+    },
+    "players": [
+      {
+        "name": "Testadin",
+        "bugs": true,
+        "collected_data": {
+          "dps": {"mean": 100000.0}
+        }
+      }
+    ],
+    "profilesets": {
+      "metric": "Damage per Second",
+      "results": [
+        {"name": "item_200101_finger1_a", "mean": 101000.0, "iterations": 2500},
+        {"name": "item_200101_finger2_b", "mean": 102000.0, "iterations": 2500}
+      ]
+    }
+  }
+}

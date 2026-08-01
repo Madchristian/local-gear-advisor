@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "local-gear-advisor"
+version = "0.1.0"
+description = "Local SimulationCraft-backed WoW tooltip advisor"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["luaparser>=4.0", "pytest>=9.0", "ruff>=0.16"]
+
+[project.scripts]
+local-gear-advisor = "local_gear_advisor.cli:main"
+
+[tool.hatch.build.targets.wheel.force-include]
+"addon/LocalGearAdvisor" = "local_gear_advisor/addon_template"
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S"]
+ignore = ["S101"]

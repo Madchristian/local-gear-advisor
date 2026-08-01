@@ -1,0 +1,12 @@
+## Interface: 120007
+## Title: Local Gear Advisor
+## Notes: Shows local SimulationCraft item comparisons
+## Notes-deDE: Zeigt lokale SimulationCraft-Gegenstandsvergleiche
+## Author: Madchristian / Hermes Agent
+## Version: 0.1.0
+## IconTexture: Interface\Icons\INV_Misc_Gear_01
+## Category: Other
+## Category-deDE: Anderes
+
+Results.lua
+Core.lua
