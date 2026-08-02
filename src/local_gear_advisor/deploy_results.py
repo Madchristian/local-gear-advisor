@@ -7,7 +7,7 @@ import re
 import stat
 import tempfile
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -17,7 +17,16 @@ from pathlib import Path
 from .safety import WowState, query_wow_state
 from .state import load_state, render_aggregate_lua
 
-_EXPECTED_FILES = frozenset({"Core.lua", "LocalGearAdvisor.toc", "Results.lua"})
+CODE_FILE_NAMES = (
+    "LocalGearAdvisor.toc",
+    "Localization.lua",
+    "Sha256.lua",
+    "Core.lua",
+    "Import.lua",
+    "Minimap.lua",
+    "UI.lua",
+)
+_EXPECTED_FILES = frozenset(CODE_FILE_NAMES) | {"Results.lua"}
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _TIMESTAMP_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z$")
 
@@ -38,17 +47,83 @@ def utc_timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def expected_addon_assets() -> tuple[bytes, bytes]:
+def _packaged_addon_asset(name: str) -> bytes:
     package = resources.files("local_gear_advisor").joinpath("addon_template")
     try:
-        return package.joinpath("Core.lua").read_bytes(), package.joinpath(
-            "LocalGearAdvisor.toc"
-        ).read_bytes()
+        return package.joinpath(name).read_bytes()
     except FileNotFoundError as exc:
-        source = Path(__file__).resolve().parents[2] / "addon" / "LocalGearAdvisor"
-        if not source.is_dir():
+        source = Path(__file__).resolve().parents[2] / "addon" / "LocalGearAdvisor" / name
+        if not source.is_file():
             raise DeployError("packaged addon assets are unavailable") from exc
-        return (source / "Core.lua").read_bytes(), (source / "LocalGearAdvisor.toc").read_bytes()
+        return source.read_bytes()
+
+
+def expected_addon_assets() -> dict[str, bytes]:
+    """Every non-Results.lua addon file, keyed by filename, exactly as packaged.
+
+    Used both to seed a fresh staging/install copy of the addon code and to
+    verify (byte-for-byte) that an already-installed addon's code is exactly
+    this release before a Results.lua-only live publish is allowed to touch
+    it -- so the live path never has to guess whether it's safe to run
+    against a hand-modified or out-of-date install.
+    """
+    return {name: _packaged_addon_asset(name) for name in CODE_FILE_NAMES}
+
+
+def extract_addon_template(destination: Path) -> Path:
+    """Create a fresh byte-verified manual-install source; never writes to WoW."""
+    destination = destination.resolve()
+    if destination.exists():
+        raise DeployError(f"staging destination already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    assets = expected_addon_assets()
+    assets["Results.lua"] = _packaged_addon_asset("Results.lua")
+
+    def readback(directory: Path) -> dict[str, bytes]:
+        entries = list(directory.iterdir())
+        if {entry.name for entry in entries} != set(assets):
+            return {}
+        observed: dict[str, bytes] = {}
+        for entry in entries:
+            _assert_plain(entry, directory=False)
+            observed[entry.name] = entry.read_bytes()
+        return observed
+
+    private = Path(
+        tempfile.mkdtemp(
+            prefix=f".{destination.name}.staging-",
+            dir=destination.parent,
+        )
+    )
+    try:
+        for name, content in assets.items():
+            target = private / name
+            with target.open("xb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+        if readback(private) != assets:
+            raise DeployError("staged addon failed byte-for-byte readback")
+        if destination.exists():
+            raise DeployError(f"staging destination already exists: {destination}")
+        # On the supported Windows platform os.rename is create-only for a
+        # directory target: a racing destination makes this fail without
+        # replacing or deleting that foreign generation.
+        os.rename(private, destination)
+        if readback(destination) != assets:
+            raise DeployError("published addon failed byte-for-byte readback")
+    except Exception as exc:
+        # Never delete by pathname here: another process could replace even a
+        # previously identity-checked directory between stat() and rmtree().
+        # Retaining staging paths is the only fully generation-safe failure
+        # behavior available via the stdlib.
+        if hasattr(exc, "add_note"):
+            exc.add_note(
+                "staging paths retained for inspection: "
+                f"private={private}; destination={destination}"
+            )
+        raise
+    return destination
 
 
 def _digest(path: Path) -> str:
@@ -238,6 +313,19 @@ def _stable_live_directories(
             close_handle(handle)
 
 
+def _validate_expected_code_files(expected_code_files: Mapping[str, bytes]) -> None:
+    if set(expected_code_files) != set(CODE_FILE_NAMES):
+        raise DeployError("expected addon code file set is incomplete or contains unknown files")
+
+
+def _mismatched_code_files(target_dir: Path, expected_code_files: Mapping[str, bytes]) -> list[str]:
+    return sorted(
+        name
+        for name, content in expected_code_files.items()
+        if (target_dir / name).read_bytes() != content
+    )
+
+
 def _validate_target(
     addon_dir: Path, *, allow_missing_results_for_recovery: bool = False
 ) -> tuple[Path, Path, Path]:
@@ -401,8 +489,7 @@ def _publish_results_live_unlocked(
     canonical_state_path: Path,
     expected_staged_sha256: str,
     addon_dir: Path,
-    expected_core: bytes,
-    expected_toc: bytes,
+    expected_code_files: Mapping[str, bytes],
     receipt_path: Path,
     timestamp: str,
     state_query: Callable[[], WowState] = query_wow_state,
@@ -412,6 +499,7 @@ def _publish_results_live_unlocked(
         raise DeployError("expected staged Results.lua hash is not a lowercase SHA-256")
     if not _TIMESTAMP_RE.fullmatch(timestamp):
         raise DeployError("deployment timestamp must use YYYYMMDDTHHMMSSZ")
+    _validate_expected_code_files(expected_code_files)
     _assert_plain(staged_results, directory=False)
     staged_bytes = staged_results.read_bytes()
     staged_hash = hashlib.sha256(staged_bytes).hexdigest()
@@ -429,13 +517,14 @@ def _publish_results_live_unlocked(
     retail, interface, target_dir = _validate_target(
         addon_dir, allow_missing_results_for_recovery=pending.exists()
     )
-    core = target_dir / "Core.lua"
-    toc = target_dir / "LocalGearAdvisor.toc"
     target = target_dir / "Results.lua"
-    if core.read_bytes() != expected_core:
-        raise DeployError("installed Core.lua is incompatible with this Results.lua schema")
-    if toc.read_bytes() != expected_toc:
-        raise DeployError("installed LocalGearAdvisor.toc is incompatible with this release")
+    protected_files = tuple(target_dir / name for name in expected_code_files)
+    mismatched = _mismatched_code_files(target_dir, expected_code_files)
+    if mismatched:
+        raise DeployError(
+            "installed addon code is incompatible with this Results.lua schema: "
+            + ", ".join(mismatched)
+        )
 
     initial = _require_not_running(state_query, phase="WoW process state")
 
@@ -446,9 +535,9 @@ def _publish_results_live_unlocked(
         raise DeployError("Results.lua backup directory must be on the WoW filesystem")
     _require_not_running(state_query, phase="backup-directory WoW preflight")
     _create_plain_directory(backups)
-    with _stable_live_directories(retail, interface, target_dir, protected_files=(core, toc)):
+    with _stable_live_directories(retail, interface, target_dir, protected_files=protected_files):
         _validate_target(addon_dir, allow_missing_results_for_recovery=pending.exists())
-        if core.read_bytes() != expected_core or toc.read_bytes() != expected_toc:
+        if _mismatched_code_files(target_dir, expected_code_files):
             raise DeployError("addon code changed before Results.lua recovery")
         _require_not_running(state_query, phase="recovery WoW preflight")
         _recover_live_publication(
@@ -472,14 +561,16 @@ def _publish_results_live_unlocked(
         _require_not_running(state_query, phase="prepared-file WoW preflight")
         _write_fsynced_exclusive(prepared, staged_bytes)
         _verify_create_only_link_support(prepared, interface, state_query)
-        if core.read_bytes() != expected_core or toc.read_bytes() != expected_toc:
+        if _mismatched_code_files(target_dir, expected_code_files):
             raise DeployError("addon code changed before Results.lua installation")
         if _saved_variables_inventory(retail) != saved_before:
             raise DeployError("SavedVariables changed before Results.lua installation")
 
-        with _stable_live_directories(retail, interface, target_dir, protected_files=(core, toc)):
+        with _stable_live_directories(
+            retail, interface, target_dir, protected_files=protected_files
+        ):
             _validate_target(addon_dir)
-            if core.read_bytes() != expected_core or toc.read_bytes() != expected_toc:
+            if _mismatched_code_files(target_dir, expected_code_files):
                 raise DeployError("addon code changed before final Results.lua installation")
             final = _require_not_running(state_query, phase="final WoW preflight")
             payload = {
@@ -531,7 +622,7 @@ def _publish_results_live_unlocked(
                 raise DeployError("installed Results.lua verification failed")
             pending.unlink()
 
-        if core.read_bytes() != expected_core or toc.read_bytes() != expected_toc:
+        if _mismatched_code_files(target_dir, expected_code_files):
             raise DeployError("addon code changed during Results.lua installation")
         saved_after = _saved_variables_inventory(retail)
         if saved_after != saved_before:
@@ -583,8 +674,7 @@ def publish_results_live(
     canonical_state_path: Path,
     expected_staged_sha256: str,
     addon_dir: Path,
-    expected_core: bytes,
-    expected_toc: bytes,
+    expected_code_files: Mapping[str, bytes],
     receipt_path: Path,
     timestamp: str,
     state_query: Callable[[], WowState] = query_wow_state,
@@ -594,6 +684,7 @@ def publish_results_live(
         raise DeployError("expected staged Results.lua hash is not a lowercase SHA-256")
     if not _TIMESTAMP_RE.fullmatch(timestamp):
         raise DeployError("deployment timestamp must use YYYYMMDDTHHMMSSZ")
+    _validate_expected_code_files(expected_code_files)
     pending = receipt_path.with_name(receipt_path.name + ".pending.json")
     retail, interface, target_dir = _validate_target(
         addon_dir, allow_missing_results_for_recovery=pending.exists()
@@ -622,8 +713,7 @@ def publish_results_live(
             canonical_state_path=canonical_state_path,
             expected_staged_sha256=expected_staged_sha256,
             addon_dir=addon_dir,
-            expected_core=expected_core,
-            expected_toc=expected_toc,
+            expected_code_files=expected_code_files,
             receipt_path=receipt_path,
             timestamp=timestamp,
             state_query=state_query,

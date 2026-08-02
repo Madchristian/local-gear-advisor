@@ -1,58 +1,9 @@
 local ADDON_NAME = ...
+LocalGearAdvisorNS = LocalGearAdvisorNS or {}
+local NS = LocalGearAdvisorNS
 
-local L = GetLocale() == "deDE" and {
-  title = "Lokale Ausrüstungsanalyse",
-  upgrade = "DPS-Upgrade",
-  downgrade = "DPS-Downgrade",
-  equal = "DPS ungefähr gleich",
-  dpsOnly = "Nur offensiver DPS-Vergleich",
-  stale = "Ergebnis veraltet",
-  noProfile = "Keine gültigen Simulationsdaten",
-  classSpec = "andere Spezialisierung",
-  identity = "Stufe oder Volk geändert",
-  gameBuild = "andere WoW-/SimC-Datenversion",
-  talents = "Talente geändert",
-  traits = "Omnium-Talente geändert",
-  gear = "Ausrüstung geändert",
-  expired = "Simulation älter als 7 Tage",
-  unknown = "Zustand nicht sicher lesbar",
-  slot = "Beste Position",
-  iterations = "Iterationen",
-  scenario = "Szenario",
-  age = "Alter",
-  simc = "SimC",
-} or {
-  title = "Local gear analysis",
-  upgrade = "DPS upgrade",
-  downgrade = "DPS downgrade",
-  equal = "DPS approximately equal",
-  dpsOnly = "Offensive DPS comparison only",
-  stale = "Result is stale",
-  noProfile = "No valid simulation data",
-  classSpec = "different specialization",
-  identity = "level or race changed",
-  gameBuild = "different WoW/SimC data version",
-  talents = "talents changed",
-  traits = "Omnium talents changed",
-  gear = "equipment changed",
-  expired = "simulation is older than 7 days",
-  unknown = "state cannot be read safely",
-  slot = "Best slot",
-  iterations = "Iterations",
-  scenario = "Scenario",
-  age = "Age",
-  simc = "SimC",
-}
-
-local SLOT_LABELS = GetLocale() == "deDE" and {
-  finger1 = "Ring 1", finger2 = "Ring 2",
-  trinket1 = "Schmuck 1", trinket2 = "Schmuck 2",
-  main_hand = "Waffenhand", off_hand = "Schildhand",
-} or {
-  finger1 = "Ring 1", finger2 = "Ring 2",
-  trinket1 = "Trinket 1", trinket2 = "Trinket 2",
-  main_hand = "Main hand", off_hand = "Off hand",
-}
+local L = NS.L
+local SLOT_LABELS = NS.SlotLabels
 
 local SLOT_IDS = {
   head = 1, neck = 2, shoulder = 3, shirt = 4, chest = 5, waist = 6,
@@ -77,10 +28,69 @@ local function IsFiniteNumber(value)
       and value < math.huge
 end
 
+local function HasControlCharacter(value)
+  if type(value) ~= "string" then return true end
+  local index = 1
+  while index <= #value do
+    local byte = string.byte(value, index)
+    if byte < 32 or byte == 127 then return true end
+    -- U+0080..U+009F in valid UTF-8 are C2 followed by 80..9F.
+    if byte == 194 and index < #value then
+      local following = string.byte(value, index + 1)
+      if following >= 128 and following <= 159 then return true end
+    end
+    index = index + 1
+  end
+  return false
+end
+
+-- Lua 5.1's %s is byte/locale based and does not recognize Unicode spaces
+-- such as NBSP. Keep this list aligned with Python str.isspace()/strip() for
+-- valid UTF-8 values accepted by the transport parser.
+local UTF8_WHITESPACE = {
+  "\194\133", "\194\160", "\225\154\128",
+  "\226\128\128", "\226\128\129", "\226\128\130", "\226\128\131",
+  "\226\128\132", "\226\128\133", "\226\128\134", "\226\128\135",
+  "\226\128\136", "\226\128\137", "\226\128\138", "\226\128\168",
+  "\226\128\169", "\226\128\175", "\226\129\159", "\227\128\128",
+}
+
+local function WhitespaceLengthAt(value, index)
+  local byte = string.byte(value, index)
+  if not byte then return nil end
+  if (byte >= 9 and byte <= 13) or (byte >= 28 and byte <= 32) then return 1 end
+  for _, token in ipairs(UTF8_WHITESPACE) do
+    if value:sub(index, index + #token - 1) == token then return #token end
+  end
+  return nil
+end
+
+local function IsWhitespaceOnly(value)
+  if type(value) ~= "string" or value == "" then return false end
+  local index = 1
+  while index <= #value do
+    local length = WhitespaceLengthAt(value, index)
+    if not length then return false end
+    index = index + length
+  end
+  return true
+end
+
+local function HasEdgeWhitespace(value)
+  if type(value) ~= "string" or value == "" then return false end
+  if WhitespaceLengthAt(value, 1) then return true end
+  for _, token in ipairs(UTF8_WHITESPACE) do
+    if #value >= #token and value:sub(-#token) == token then return true end
+  end
+  local last = string.byte(value, #value)
+  return last and ((last >= 9 and last <= 13) or (last >= 28 and last <= 32)) or false
+end
+
 local function IsNonEmptyString(value)
   return not IsSecret(value)
       and type(value) == "string"
       and value:find("%S") ~= nil
+      and not HasControlCharacter(value)
 end
 
 local function Tokenize(value)
@@ -306,6 +316,7 @@ local function IsValidProfileShape(profile)
   then return false end
   if not IsNonEmptyString(profile.server) or Tokenize(profile.server) ~= profile.server
       or not IsNonEmptyString(profile.characterName)
+      or HasEdgeWhitespace(profile.characterName)
       or not IsFiniteNumber(profile.specID) or profile.specID <= 0 or profile.specID > 10000
       or profile.specID % 1 ~= 0
       or not IsNonEmptyString(profile.class) or string.lower(profile.class) ~= profile.class
@@ -317,6 +328,7 @@ local function IsValidProfileShape(profile)
       or not HasExactKeys(profile.traitSystems, {omnium_talents=true})
       or IsSecret(profile.traitSystems.omnium_talents)
       or type(profile.traitSystems.omnium_talents) ~= "string"
+      or HasControlCharacter(profile.traitSystems.omnium_talents)
       or not HasExactKeys(profile.baselineGear, RESULT_SLOTS)
       or not IsNonEmptyString(profile.fightStyle)
       or not IsFiniteNumber(profile.baselineDps) or profile.baselineDps < 0
@@ -326,6 +338,8 @@ local function IsValidProfileShape(profile)
       or profile.generatedAt % 1 ~= 0
       or not IsNonEmptyString(profile.simcVersion)
       or not IsNonEmptyString(profile.simcRevision)
+      or #profile.simcRevision < 7 or #profile.simcRevision > 40
+      or profile.simcRevision:match("^[0-9a-f]+$") == nil
       or not IsNonEmptyString(profile.gameVersion)
       or IsSecret(profile.dbcSource) or profile.dbcSource ~= "Live"
       or not IsNonEmptyString(profile.profileHash) or #profile.profileHash ~= 64
@@ -334,20 +348,46 @@ local function IsValidProfileShape(profile)
   then return false end
   for _, slot in ipairs(BASELINE_SLOTS) do
     local expected = profile.baselineGear[slot]
-    if IsSecret(expected) or (expected ~= false and not IsNonEmptyString(expected)) then
+    if IsSecret(expected)
+        or (expected ~= false and (not IsNonEmptyString(expected) or IsWhitespaceOnly(expected))) then
       return false
     end
   end
+  local seenFingerprints = {}
   for options, item in pairs(profile.items) do
     if not IsValidItem(options, item) then return false end
+    if seenFingerprints[item.fingerprint] then return false end
+    seenFingerprints[item.fingerprint] = true
   end
   return true
 end
+
+-- Exposed so Import.lua validates a freshly-decoded transport profile with
+-- the exact same semantic bounds this file already applies to
+-- LocalGearAdvisorResults/LocalGearAdvisorDB entries, instead of a second,
+-- potentially-drifting copy of these checks.
+NS.Schema = NS.Schema or {}
+NS.Schema.IsValidProfileShape = IsValidProfileShape
+NS.Schema.BASELINE_SLOTS = BASELINE_SLOTS
+
+-- Shared with UI.lua's Profile page so the "Alter"/"Age" column formats
+-- ages exactly like the tooltip does, instead of a second copy drifting.
+NS.AgeText = AgeText
 
 local function TableLength(value)
   local count = 0
   for _ in pairs(value) do count = count + 1 end
   return count
+end
+
+-- Shared by ValidProfiles' duplicate-identity check and Import.lua's
+-- transactional apply/undo/delete, so "same identity" is decided in exactly
+-- one place. profile.region/server are already lowercase by the time
+-- IsValidProfileShape has accepted a profile; characterName is compared
+-- case-insensitively too, matching WoW's per-realm case-insensitive names.
+local function ProfileIdentityKey(profile)
+  return string.lower(profile.region) .. "\30" .. string.lower(profile.server)
+      .. "\30" .. string.lower(profile.characterName) .. "\30" .. profile.specID
 end
 
 -- Fail closed on the whole aggregate (not just one entry) if anything is
@@ -370,8 +410,7 @@ local function ValidProfiles(results)
   for _, profile in ipairs(results.profiles) do
     arrayCount = arrayCount + 1
     if not IsValidProfileShape(profile) then return nil end
-    local identityKey = string.lower(profile.region) .. "\30" .. string.lower(profile.server)
-        .. "\30" .. string.lower(profile.characterName) .. "\30" .. profile.specID
+    local identityKey = ProfileIdentityKey(profile)
     if seenIdentity[identityKey] then return nil end
     seenIdentity[identityKey] = true
     profiles[#profiles + 1] = profile
@@ -384,6 +423,9 @@ local function ValidProfiles(results)
   end
   return profiles
 end
+
+NS.Schema.ValidProfiles = ValidProfiles
+NS.Schema.IdentityKey = ProfileIdentityKey
 
 local function CurrentRuntimeIdentity()
   local name = UnitName("player")
@@ -436,14 +478,22 @@ local function FindCurrentProfile(profiles, identity)
   return nil
 end
 
-local function ValidateProfileAgainstRuntime(profile, identity)
-  local now = time()
-  if not IsFiniteNumber(now) or profile.generatedAt > now + 300 then
+local function CheckProfileFreshness(profile, now)
+  now = now or time()
+  if not IsFiniteNumber(now) or not IsFiniteNumber(profile.generatedAt)
+      or profile.generatedAt > now + 300 then
     return false, L.unknown
   end
   if now - profile.generatedAt > MAX_RESULT_AGE then
     return false, L.expired
   end
+  return true, nil
+end
+NS.CheckProfileFreshness = CheckProfileFreshness
+
+local function ValidateProfileAgainstRuntime(profile, identity)
+  local fresh, freshnessReason = CheckProfileFreshness(profile)
+  if not fresh then return false, freshnessReason end
   local wowVersion, wowBuild = GetBuildInfo()
   if IsSecret(wowVersion) or IsSecret(wowBuild)
       or type(wowVersion) ~= "string" or type(wowBuild) ~= "string" then
@@ -518,16 +568,37 @@ end
 -- Locate exactly the current character/spec's record (if any) and validate
 -- it. Returns the matched profile (or nil), ok, reason -- item lookups in
 -- AddResult must only ever use the returned profile, never the raw table.
+--
+-- Two sources are consulted: the immutable LocalGearAdvisorResults shipped/
+-- staged by the desktop companion, and the mutable, account-wide
+-- LocalGearAdvisorDB written in place by Import.lua's transactional apply.
+-- Both share the exact same schemaVersion-2 shape and are validated by the
+-- exact same ValidProfiles() -- a malformed DB (any bad entry, duplicate
+-- identity, non-dense array, ...) is refused in its entirety, exactly like a
+-- tampered LocalGearAdvisorResults would be, so a corrupted DB can never be
+-- partially trusted; it simply falls back to LocalGearAdvisorResults, never
+-- to a different character/spec's data. For an identity present in both
+-- sources, a valid DB entry always wins (it is the user's latest import).
 local function CheckValidity()
-  local profiles = ValidProfiles(LocalGearAdvisorResults)
-  if not profiles then
-    return nil, false, L.noProfile
-  end
   local identity = CurrentRuntimeIdentity()
   if not identity then
     return nil, false, L.unknown
   end
-  local matched = FindCurrentProfile(profiles, identity)
+
+  local dbProfiles = ValidProfiles(LocalGearAdvisorDB)
+  if dbProfiles then
+    local matched = FindCurrentProfile(dbProfiles, identity)
+    if matched then
+      local ok, reason = ValidateProfileAgainstRuntime(matched, identity)
+      return matched, ok, reason
+    end
+  end
+
+  local fallbackProfiles = ValidProfiles(LocalGearAdvisorResults)
+  if not fallbackProfiles then
+    return nil, false, L.noProfile
+  end
+  local matched = FindCurrentProfile(fallbackProfiles, identity)
   if not matched then
     return nil, false, L.noProfile
   end

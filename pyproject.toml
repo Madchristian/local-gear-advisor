@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "local-gear-advisor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local SimulationCraft-backed WoW tooltip advisor"
 requires-python = ">=3.11"
 dependencies = []
+license = { file = "LICENSE.txt" }
 
 [dependency-groups]
 dev = ["luaparser>=4.0", "lupa>=2.0", "pytest>=9.0", "ruff>=0.16"]

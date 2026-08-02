@@ -3,10 +3,18 @@
 ## Notes: Shows local SimulationCraft item comparisons
 ## Notes-deDE: Zeigt lokale SimulationCraft-Gegenstandsvergleiche
 ## Author: Madchristian / Hermes Agent
-## Version: 0.1.0
+## Version: 0.2.0
+## X-License: All Rights Reserved
 ## IconTexture: Interface\Icons\INV_Misc_Gear_01
 ## Category: Other
 ## Category-deDE: Anderes
+## SavedVariables: LocalGearAdvisorDB, LocalGearAdvisorUndo, LocalGearAdvisorSettings
+## AddonCompartmentFunc: LocalGearAdvisor_OnAddonCompartmentClick
 
 Results.lua
+Localization.lua
+Sha256.lua
 Core.lua
+Import.lua
+Minimap.lua
+UI.lua

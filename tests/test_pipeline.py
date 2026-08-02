@@ -1,13 +1,75 @@
+import os
+import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from local_gear_advisor.import_codec import TRANSPORT_MAGIC, decode_profile_transport
 from local_gear_advisor.pipeline import ExcludedCandidate, analyze_export
 from local_gear_advisor.profilesets import SimSettings
 from local_gear_advisor.runner import ParsedSimcReport
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample.simc"
+
+
+def test_default_runtime_state_and_results_are_outside_the_source_checkout() -> None:
+    import local_gear_advisor.pipeline as pipeline_module
+
+    source_root = Path(pipeline_module.__file__).resolve().parents[2]
+    for path in (
+        pipeline_module.PROJECT_ROOT,
+        pipeline_module.PROJECT_STAGING_RESULTS,
+        pipeline_module.PROJECT_STATE_PATH,
+    ):
+        assert not path.resolve().is_relative_to(source_root)
+
+
+def test_empty_localappdata_uses_an_absolute_user_data_fallback() -> None:
+    source_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = ""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from local_gear_advisor.pipeline import PROJECT_ROOT; print(PROJECT_ROOT.resolve())",
+        ],
+        cwd=source_root,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    runtime_root = Path(completed.stdout.strip())
+
+    assert runtime_root.is_absolute()
+    assert not runtime_root.is_relative_to(source_root)
+    assert runtime_root == Path.home() / "AppData" / "Local" / "LocalGearAdvisor"
+
+
+@pytest.mark.parametrize("invalid_value", ["relative-runtime", "   "])
+def test_invalid_localappdata_uses_an_absolute_user_data_fallback(invalid_value: str) -> None:
+    source_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["LOCALAPPDATA"] = invalid_value
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from local_gear_advisor.pipeline import PROJECT_ROOT; print(PROJECT_ROOT.resolve())",
+        ],
+        cwd=source_root,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert Path(completed.stdout.strip()) == (
+        Path.home() / "AppData" / "Local" / "LocalGearAdvisor"
+    )
 
 
 def _clean_export() -> str:
@@ -94,6 +156,112 @@ def test_pipeline_publishes_only_after_complete_valid_results(tmp_path: Path) ->
     assert summary.variant_count == 5
     assert summary.simc_version == "1205-01"
     assert len(observed["expected_names"]) == 5
+
+
+def test_pipeline_refuses_to_use_the_source_addon_results_as_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import local_gear_advisor.pipeline as pipeline_module
+
+    source_addon = tmp_path / "source" / "addon" / "LocalGearAdvisor"
+    source_addon.mkdir(parents=True)
+    source_results = source_addon / "Results.lua"
+    original = b"protected source placeholder\n"
+    source_results.write_bytes(original)
+    monkeypatch.setattr(pipeline_module, "_SOURCE_ADDON", source_addon)
+
+    with pytest.raises(ValueError, match="source addon"):
+        analyze_export(
+            export_text=_clean_export(),
+            executable=tmp_path / "simc.exe",
+            settings=SimSettings(iterations=1000),
+            results_path=source_results,
+            run_root=tmp_path / "runs",
+            generated_at=1785573600,
+            simc_runner=_fake_report,
+            staging_target=source_results,
+            state_path=tmp_path / "state" / "profiles.json",
+        )
+
+    assert source_results.read_bytes() == original
+
+
+def test_summary_carries_a_valid_importable_transport_for_the_analyzed_profile(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    summary = analyze_export(
+        export_text=_clean_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573600,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
+    )
+
+    assert summary.transport_text.startswith(f"{TRANSPORT_MAGIC}:")
+    decoded = decode_profile_transport(summary.transport_text)
+    assert decoded.identity.region == summary.region
+    assert decoded.identity.realm == summary.realm
+    assert decoded.identity.spec_id == summary.spec_id
+    assert len(decoded.items) == summary.candidate_count
+
+
+def test_stage_packaged_addon_assets_seeds_every_code_file_bytewise_but_not_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import local_gear_advisor.pipeline as pipeline_module
+    from local_gear_advisor.deploy_results import expected_addon_assets
+
+    staging_results = tmp_path / "not-the-source" / "addon" / "LocalGearAdvisor" / "Results.lua"
+    monkeypatch.setattr(pipeline_module, "PROJECT_STAGING_RESULTS", staging_results)
+    monkeypatch.setattr(pipeline_module, "_SOURCE_ADDON", tmp_path / "unrelated-source-addon")
+
+    pipeline_module._stage_packaged_addon_assets(staging_results)
+
+    expected = expected_addon_assets()
+    for name, content in expected.items():
+        assert (staging_results.parent / name).read_bytes() == content
+    # This seeding step only ever writes the code files; Results.lua itself
+    # is published exclusively by publish_profile_update().
+    assert not staging_results.exists()
+
+
+def test_stage_packaged_addon_assets_is_a_noop_for_a_non_default_staging_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import local_gear_advisor.pipeline as pipeline_module
+
+    monkeypatch.setattr(
+        pipeline_module, "PROJECT_STAGING_RESULTS", tmp_path / "default" / "Results.lua"
+    )
+    monkeypatch.setattr(pipeline_module, "_SOURCE_ADDON", tmp_path / "unrelated-source-addon")
+
+    other_target = tmp_path / "custom" / "Results.lua"
+    other_target.parent.mkdir(parents=True)
+
+    pipeline_module._stage_packaged_addon_assets(other_target)
+
+    assert list(other_target.parent.iterdir()) == []
+
+
+def test_stage_packaged_addon_assets_is_a_noop_inside_the_dev_source_addon_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import local_gear_advisor.pipeline as pipeline_module
+
+    source_addon = tmp_path / "addon" / "LocalGearAdvisor"
+    source_addon.mkdir(parents=True)
+    staging_results = source_addon / "Results.lua"
+    monkeypatch.setattr(pipeline_module, "PROJECT_STAGING_RESULTS", staging_results)
+    monkeypatch.setattr(pipeline_module, "_SOURCE_ADDON", source_addon)
+
+    pipeline_module._stage_packaged_addon_assets(staging_results)
+
+    assert list(source_addon.iterdir()) == []
 
 
 def test_weapon_candidates_are_excluded_not_blocking(tmp_path: Path) -> None:

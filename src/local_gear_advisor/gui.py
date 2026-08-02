@@ -4,6 +4,7 @@ import os
 import queue
 import threading
 import tkinter as tk
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -17,6 +18,15 @@ from .deploy_results import (
 )
 from .pipeline import AnalysisSummary, analyze_export
 from .profilesets import SimSettings
+
+SIMULATIONCRAFT_DOWNLOAD_URL = "https://www.simulationcraft.org/download.html"
+
+
+def open_simulationcraft_download(opener=webbrowser.open_new_tab) -> bool:
+    try:
+        return bool(opener(SIMULATIONCRAFT_DOWNLOAD_URL))
+    except (OSError, webbrowser.Error):
+        return False
 
 
 def discover_addon_directory() -> Path | None:
@@ -32,17 +42,33 @@ def discover_addon_directory() -> Path | None:
 
 
 def deploy_completed_analysis(summary: AnalysisSummary, addon_dir: Path) -> DeployReceipt:
-    core, toc = expected_addon_assets()
     return publish_results_live(
         staged_results=summary.results_path,
         canonical_state_path=summary.state_path,
         expected_staged_sha256=summary.results_sha256,
         addon_dir=addon_dir,
-        expected_core=core,
-        expected_toc=toc,
+        expected_code_files=expected_addon_assets(),
         receipt_path=DEFAULT_DEPLOY_RECEIPT,
         timestamp=utc_timestamp(),
     )
+
+
+def _set_import_transport(widget, button, text: str | None) -> None:
+    widget.configure(state="normal")
+    widget.delete("1.0", "end")
+    if text:
+        widget.insert("1.0", text)
+    widget.configure(state="disabled")
+    button.configure(state="normal" if text else "disabled")
+
+
+def _copy_import_text_to_clipboard(root, widget) -> bool:
+    text = widget.get("1.0", "end-1c").strip()
+    if not text:
+        return False
+    root.clipboard_clear()
+    root.clipboard_append(text)
+    return True
 
 
 def launch() -> None:
@@ -80,7 +106,23 @@ def launch() -> None:
         if path:
             simc_var.set(path)
 
-    ttk.Button(outer, text="Auswählen…", command=choose_simc).grid(row=0, column=2, padx=(8, 0))
+    def open_simc_download() -> None:
+        if not open_simulationcraft_download():
+            messagebox.showerror(
+                "Browser konnte nicht geöffnet werden",
+                "Die offizielle SimulationCraft-Downloadseite konnte nicht geöffnet werden:\n"
+                f"{SIMULATIONCRAFT_DOWNLOAD_URL}",
+                parent=root,
+            )
+
+    simc_actions = ttk.Frame(outer)
+    simc_actions.grid(row=0, column=2, padx=(8, 0))
+    ttk.Button(simc_actions, text="Auswählen…", command=choose_simc).pack(side="left")
+    ttk.Button(
+        simc_actions,
+        text="SimulationCraft herunterladen…",
+        command=open_simc_download,
+    ).pack(side="left", padx=(8, 0))
 
     ttk.Label(outer, text="Addon-Verzeichnis").grid(
         row=1, column=0, sticky="w", padx=(0, 8), pady=(10, 0)
@@ -168,6 +210,29 @@ def launch() -> None:
         foreground="#666666",
     ).grid(row=9, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
+    ttk.Label(outer, text="Importtext für /lga im Spiel").grid(
+        row=10, column=0, columnspan=3, sticky="w", pady=(14, 4)
+    )
+    import_text_widget = tk.Text(outer, height=4, wrap="char", state="disabled")
+    import_text_widget.grid(row=11, column=0, columnspan=3, sticky="ew")
+
+    def copy_import_text() -> None:
+        _copy_import_text_to_clipboard(root, import_text_widget)
+
+    import_row = ttk.Frame(outer)
+    import_row.grid(row=12, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+    copy_import_button = ttk.Button(
+        import_row, text="Importtext kopieren", command=copy_import_text, state="disabled"
+    )
+    copy_import_button.pack(side="left")
+    ttk.Label(
+        import_row,
+        text=(
+            "In WoW im LocalGearAdvisor-Import-Tab einfügen (Strg+V); kein automatischer Import."
+        ),
+        foreground="#666666",
+    ).pack(side="left", padx=(10, 0))
+
     def finish_success(
         summary: AnalysisSummary,
         *,
@@ -177,6 +242,7 @@ def launch() -> None:
         nonlocal analysis_running, pending_summary
         analysis_running = False
         analyze_button.configure(state="normal")
+        _set_import_transport(import_text_widget, copy_import_button, summary.transport_text)
         status = (
             f"Fertig: {summary.candidate_count} Items, {summary.variant_count} Varianten, "
             f"{summary.retained_profile_count} Profile, SimC {summary.simc_version}. "
@@ -230,6 +296,7 @@ def launch() -> None:
         nonlocal analysis_running
         analysis_running = False
         analyze_button.configure(state="normal")
+        _set_import_transport(import_text_widget, copy_import_button, None)
         status_var.set(f"Fehler: {exc}")
         messagebox.showerror("Analyse fehlgeschlagen", str(exc), parent=root)
 

@@ -383,7 +383,7 @@ def _parse_baseline_gear(raw: Any) -> dict[str, str | None]:
     gear: dict[str, str | None] = {}
     for slot in _BASELINE_SLOTS:
         value = raw[slot]
-        if value is not None and (not isinstance(value, str) or not value):
+        if value is not None and (not isinstance(value, str) or not value or not value.strip()):
             raise StateError(f"aggregate state baselineGear.{slot} must be a string or null")
         if value is not None and _CONTROL_CHAR_RE.search(value):
             raise StateError(f"aggregate state baselineGear.{slot} contains a control character")
@@ -404,7 +404,7 @@ def _parse_trait_systems(raw: Any) -> dict[str, str]:
     return result
 
 
-def _parse_profile(raw: Any) -> ProfileRecord:
+def parse_profile_dict(raw: Any) -> ProfileRecord:
     if not isinstance(raw, dict) or set(raw.keys()) != _ALLOWED_PROFILE_KEYS:
         raise StateError(f"aggregate state has a malformed profile: {raw!r}")
     items_raw = raw.get("items")
@@ -489,7 +489,7 @@ def _parse_state(raw: bytes) -> AggregateState:
         raise StateError("aggregate state profiles must be a list")
     if len(profiles_raw) > 10_000:
         raise StateError("aggregate state profiles is too large")
-    profiles = tuple(_parse_profile(entry) for entry in profiles_raw)
+    profiles = tuple(parse_profile_dict(entry) for entry in profiles_raw)
     seen_keys: set[tuple[str, str, str, int]] = set()
     for record in profiles:
         key = record.identity.sort_key()
@@ -511,48 +511,56 @@ def load_state(path: Path) -> AggregateState:
     return _parse_state(raw)
 
 
+def profile_to_dict(record: ProfileRecord) -> dict[str, Any]:
+    """Canonical JSON-compatible dict for one profile record.
+
+    Shared by the on-disk aggregate JSON writer and the single-profile
+    transport codec (import_codec.py) so both always agree, byte for byte,
+    with what parse_profile_dict() accepts back.
+    """
+    return {
+        "identity": {
+            "region": record.identity.region,
+            "realm": record.identity.realm,
+            "name": record.identity.name,
+            "specId": record.identity.spec_id,
+        },
+        "class": record.character_class,
+        "spec": record.spec,
+        "level": record.level,
+        "race": record.race,
+        "talents": record.talents,
+        "traitSystems": dict(sorted(record.trait_systems.items())),
+        "baselineGear": {slot: record.baseline_gear.get(slot) for slot in _BASELINE_SLOTS},
+        "fightStyle": record.fight_style,
+        "baselineDps": record.baseline_dps,
+        "simcVersion": record.simc_version,
+        "simcRevision": record.simc_revision,
+        "gameVersion": record.game_version,
+        "dbcSource": record.dbc_source,
+        "profileHash": record.profile_hash,
+        "generatedAt": record.generated_at,
+        "items": [
+            {
+                "options": item.options,
+                "itemId": item.item_id,
+                "itemName": item.item_name,
+                "fingerprint": item.fingerprint,
+                "bestSlot": item.best_slot,
+                "candidateDps": item.candidate_dps,
+                "deltaPercent": item.delta_percent,
+                "iterations": item.iterations,
+            }
+            for item in sorted(record.items, key=lambda value: value.options)
+        ],
+    }
+
+
 def _dump_state_json(state: AggregateState) -> str:
+    ordered = sorted(state.profiles, key=lambda r: r.identity.sort_key())
     payload = {
         "schemaVersion": _SCHEMA_VERSION,
-        "profiles": [
-            {
-                "identity": {
-                    "region": record.identity.region,
-                    "realm": record.identity.realm,
-                    "name": record.identity.name,
-                    "specId": record.identity.spec_id,
-                },
-                "class": record.character_class,
-                "spec": record.spec,
-                "level": record.level,
-                "race": record.race,
-                "talents": record.talents,
-                "traitSystems": dict(sorted(record.trait_systems.items())),
-                "baselineGear": {slot: record.baseline_gear.get(slot) for slot in _BASELINE_SLOTS},
-                "fightStyle": record.fight_style,
-                "baselineDps": record.baseline_dps,
-                "simcVersion": record.simc_version,
-                "simcRevision": record.simc_revision,
-                "gameVersion": record.game_version,
-                "dbcSource": record.dbc_source,
-                "profileHash": record.profile_hash,
-                "generatedAt": record.generated_at,
-                "items": [
-                    {
-                        "options": item.options,
-                        "itemId": item.item_id,
-                        "itemName": item.item_name,
-                        "fingerprint": item.fingerprint,
-                        "bestSlot": item.best_slot,
-                        "candidateDps": item.candidate_dps,
-                        "deltaPercent": item.delta_percent,
-                        "iterations": item.iterations,
-                    }
-                    for item in sorted(record.items, key=lambda value: value.options)
-                ],
-            }
-            for record in sorted(state.profiles, key=lambda r: r.identity.sort_key())
-        ],
+        "profiles": [profile_to_dict(record) for record in ordered],
     }
     return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 

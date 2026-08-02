@@ -12,7 +12,10 @@ def test_addon_lua_files_parse() -> None:
 
 def test_results_load_before_tooltip_core() -> None:
     toc = (ADDON / "LocalGearAdvisor.toc").read_text(encoding="utf-8")
-    assert toc.index("Results.lua") < toc.index("Core.lua")
+    assert toc.index("Results.lua") < toc.index("Localization.lua")
+    assert toc.index("Localization.lua") < toc.index("Core.lua")
+    assert toc.index("Sha256.lua") < toc.index("Import.lua")
+    assert toc.index("Core.lua") < toc.index("Import.lua")
 
 
 def test_results_placeholder_is_a_valid_empty_v2_aggregate() -> None:
@@ -32,7 +35,6 @@ def test_tooltip_is_exact_match_and_fails_closed_on_stale_state() -> None:
     assert "issecretvalue" in core
     assert "if not valid then" in core
     assert 'HookScript("OnTooltipCleared"' in core
-    assert "Result is stale" in core
     assert '"suffix=" .. suffixID' in core
     assert "redirected_base_stats" not in core
     assert "MAX_RESULT_AGE" in core
@@ -54,15 +56,17 @@ def test_tooltip_is_exact_match_and_fails_closed_on_stale_state() -> None:
     assert "local expectedOmnium = profile.traitSystems.omnium_talents" in core
     assert 'profile.dbcSource ~= "Live"' in core
     assert "BASELINE_SLOTS" in core
-    assert 'dpsOnly = "Nur offensiver DPS-Vergleich"' in core
-    assert 'dpsOnly = "Offensive DPS comparison only"' in core
-    assert 'upgrade = "DPS-Upgrade"' in core
-    assert 'upgrade = "DPS upgrade"' in core
-    assert 'downgrade = "DPS-Downgrade"' in core
-    assert 'downgrade = "DPS downgrade"' in core
-    assert 'equal = "DPS ungefähr gleich"' in core
-    assert 'equal = "DPS approximately equal"' in core
     assert "tooltip:AddLine(L.dpsOnly" in core
+    localization = (ADDON / "Localization.lua").read_text(encoding="utf-8")
+    assert 'stale = "Result is stale"' in localization
+    assert 'dpsOnly = "Nur offensiver DPS-Vergleich"' in localization
+    assert 'dpsOnly = "Offensive DPS comparison only"' in localization
+    assert 'upgrade = "DPS-Upgrade"' in localization
+    assert 'upgrade = "DPS upgrade"' in localization
+    assert 'downgrade = "DPS-Downgrade"' in localization
+    assert 'downgrade = "DPS downgrade"' in localization
+    assert 'equal = "DPS ungefähr gleich"' in localization
+    assert 'equal = "DPS approximately equal"' in localization
     toc = (ADDON / "LocalGearAdvisor.toc").read_text(encoding="utf-8")
     assert "## Interface: 120007" in toc
     assert "120005" not in toc and "120100" not in toc

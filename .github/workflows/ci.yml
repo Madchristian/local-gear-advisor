@@ -108,7 +108,16 @@ jobs:
                   expected["local_gear_advisor/" + name[len(source_prefix):]] = (
                       pathlib.Path(name).read_bytes()
                   )
-          for name in ("Core.lua", "LocalGearAdvisor.toc", "Results.lua"):
+          for name in (
+              "LocalGearAdvisor.toc",
+              "Localization.lua",
+              "Sha256.lua",
+              "Core.lua",
+              "Import.lua",
+              "Minimap.lua",
+              "UI.lua",
+              "Results.lua",
+          ):
               expected[f"local_gear_advisor/addon_template/{name}"] = (
                   pathlib.Path("addon/LocalGearAdvisor", name).read_bytes()
               )
@@ -138,6 +147,7 @@ jobs:
                   f"{dist_root}/METADATA",
                   f"{dist_root}/WHEEL",
                   f"{dist_root}/entry_points.txt",
+                  f"{dist_root}/licenses/LICENSE.txt",
                   f"{dist_root}/RECORD",
               }
               assert set(names) - payload_names == expected_metadata
@@ -214,10 +224,19 @@ jobs:
           assert len(registry.specs) == 40
           assert registry.specs[("druid", "guardian")] == 104
           assert registry.specs[("demonhunter", "devourer")] == 1480
-          core, toc = expected_addon_assets()
+          assets = expected_addon_assets()
           source = pathlib.Path("addon/LocalGearAdvisor")
-          assert core == (source / "Core.lua").read_bytes()
-          assert toc == (source / "LocalGearAdvisor.toc").read_bytes()
+          assert set(assets) == {
+              "LocalGearAdvisor.toc",
+              "Localization.lua",
+              "Sha256.lua",
+              "Core.lua",
+              "Import.lua",
+              "Minimap.lua",
+              "UI.lua",
+          }
+          for name, content in assets.items():
+              assert content == (source / name).read_bytes(), name
           installed_results = (
               target / "local_gear_advisor" / "addon_template" / "Results.lua"
           ).read_bytes()
