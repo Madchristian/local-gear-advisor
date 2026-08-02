@@ -1,0 +1,30 @@
+Local Gear Advisor - Lizenz
+
+Copyright (c) 2026 Christian. Alle Rechte vorbehalten.
+
+ALL RIGHTS RESERVED
+
+Diese Software einschließlich World-of-Warcraft-Addon, lokalem Helper, Quellcode, Benutzeroberflächen, Dokumentation und zugehörigen Dateien (nachfolgend „Software“) ist urheberrechtlich geschützt.
+
+Erlaubt ist:
+
+1. das kostenlose Herunterladen und die private, nicht kommerzielle Nutzung der unveränderten Software;
+2. das Anfertigen persönlicher Sicherungskopien;
+3. die Weitergabe eines unveränderten, vom Rechteinhaber bereitgestellten Originalarchivs innerhalb einer privaten Gilde oder Spielgemeinschaft;
+4. die Verbreitung über vom Rechteinhaber ausdrücklich autorisierte Projektseiten und Plattformen, derzeit ausschließlich die offizielle GitHub-Projektseite des Rechteinhabers.
+
+Ohne vorherige schriftliche Genehmigung des Rechteinhabers ist insbesondere nicht erlaubt:
+
+1. die Software oder Teile davon zu verändern, zu übersetzen, zu bearbeiten oder daraus abgeleitete Werke zu erstellen;
+2. veränderte Fassungen zu veröffentlichen oder weiterzugeben;
+3. die Software auf anderen Downloadportalen neu hochzuladen, zu spiegeln, in Sammlungen, Addon-Pakete oder Software-Bundles aufzunehmen oder unter anderem Namen anzubieten;
+4. die Software oder Teile davon zu verkaufen, zu vermieten, kommerziell zu lizenzieren oder anderweitig kommerziell zu verwerten;
+5. Hinweise auf Urheberschaft, Lizenz oder Herkunft zu entfernen oder zu verändern.
+
+Die Software wird „wie besehen“ und ohne ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Soweit gesetzlich zulässig, haftet der Rechteinhaber nicht für unmittelbare oder mittelbare Schäden, Datenverluste, entgangene Gewinne oder sonstige Folgen, die aus der Nutzung oder Nichtverfügbarkeit der Software entstehen.
+
+World of Warcraft, Blizzard Entertainment, SimulationCraft und zugehörige Namen, Marken, Grafiken und Inhalte sind Eigentum ihrer jeweiligen Rechteinhaber. Local Gear Advisor ist ein unabhängiges Fanprojekt und steht nicht in Verbindung mit Blizzard Entertainment oder dem SimulationCraft-Projekt.
+
+Die Software führt SimulationCraft nicht mit und erteilt keine Rechte an SimulationCraft. Der Downloadbutton öffnet lediglich dessen offizielle Website im Standardbrowser.
+
+Anfragen zu Genehmigungen können über die offizielle GitHub-Projektseite an den Rechteinhaber gerichtet werden.

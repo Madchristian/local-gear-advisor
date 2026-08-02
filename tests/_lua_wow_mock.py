@@ -12,9 +12,11 @@ from pathlib import Path
 
 from lupa.lua51 import LuaRuntime
 
-CORE_SOURCE = (Path(__file__).parents[1] / "addon" / "LocalGearAdvisor" / "Core.lua").read_text(
-    encoding="utf-8"
-)
+_ADDON_DIR = Path(__file__).parents[1] / "addon" / "LocalGearAdvisor"
+LOCALIZATION_SOURCE = (_ADDON_DIR / "Localization.lua").read_text(encoding="utf-8")
+SHA256_SOURCE = (_ADDON_DIR / "Sha256.lua").read_text(encoding="utf-8")
+CORE_SOURCE = (_ADDON_DIR / "Core.lua").read_text(encoding="utf-8")
+IMPORT_SOURCE = (_ADDON_DIR / "Import.lua").read_text(encoding="utf-8")
 
 _SLOT_IDS = {
     "head": 1,
@@ -67,6 +69,7 @@ class LuaHarness:
         now: int,
         locale: str = "enUS",
         secret_values: frozenset[str] = frozenset(),
+        include_import: bool = False,
     ) -> None:
         self.rt = LuaRuntime(unpack_returned_tuples=True)
         self._hooks: list = []
@@ -156,10 +159,68 @@ class LuaHarness:
         g.C_Traits = _Traits
 
         self.rt.execute(results_lua)
+        self.rt.execute(LOCALIZATION_SOURCE)
+        if include_import:
+            self.rt.execute(SHA256_SOURCE)
         self.rt.execute(CORE_SOURCE)
+        if include_import:
+            self.rt.execute(IMPORT_SOURCE)
 
     def set_results(self, results_lua: str) -> None:
         self.rt.execute(results_lua)
+
+    def set_db(self, db_lua: str) -> None:
+        self.rt.execute(db_lua)
+
+    def decode_profile_transport(self, text: str):
+        """Real Import.lua decode. Returns (True, profile) or (False, err)."""
+        fn = self.rt.eval(
+            """
+            function(text)
+              local profile, err = LocalGearAdvisorNS.DecodeProfileTransport(text)
+              if profile == nil then return false, err end
+              return true, profile
+            end
+            """
+        )
+        return fn(text)
+
+    def apply_profile_transport(self, profile):
+        """Real Import.lua transactional apply. Returns (True, nil) or (False, err)."""
+        fn = self.rt.eval(
+            """
+            function(profile)
+              local ok, err = LocalGearAdvisorNS.ApplyProfileTransport(profile)
+              return ok, err
+            end
+            """
+        )
+        return fn(profile)
+
+    def undo_last_import(self):
+        fn = self.rt.eval("function() return LocalGearAdvisorNS.UndoLastImport() end")
+        return fn()
+
+    def delete_db_profile(self, identity_key: str):
+        fn = self.rt.eval("function(k) return LocalGearAdvisorNS.DeleteDbProfile(k) end")
+        return fn(identity_key)
+
+    def identity_key(self, profile) -> str:
+        fn = self.rt.eval(
+            "function(profile) return LocalGearAdvisorNS.Schema.IdentityKey(profile) end"
+        )
+        return fn(profile)
+
+    def db_profile_count(self) -> int:
+        fn = self.rt.eval(
+            "function() if LocalGearAdvisorDB == nil then return 0 end "
+            "return #(LocalGearAdvisorDB.profiles) end"
+        )
+        return fn()
+
+    def db_is_nil(self) -> bool:
+        fn = self.rt.eval("function() return LocalGearAdvisorDB == nil end")
+        return fn()
 
     def show_tooltip(self, item_link_text: str) -> list[str]:
         mock = self.rt.eval(

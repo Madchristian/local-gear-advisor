@@ -5,9 +5,10 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from importlib import resources
 from pathlib import Path
 
+from .deploy_results import expected_addon_assets
+from .import_codec import encode_profile_transport
 from .profilesets import SimSettings, build_profileset_input
 from .results import ensure_supported_profile, evaluate_results, write_atomic_verified
 from .runner import ParsedSimcReport, SimcRunError, run_simc
@@ -24,12 +25,14 @@ from .state import (
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_ADDON = _SOURCE_ROOT / "addon" / "LocalGearAdvisor"
-if _SOURCE_ADDON.is_dir():
-    PROJECT_ROOT = _SOURCE_ROOT
-else:
-    PROJECT_ROOT = (
-        Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "LocalGearAdvisor"
-    )
+_FALLBACK_LOCAL_APP_DATA = Path.home() / "AppData" / "Local"
+_CONFIGURED_LOCAL_APP_DATA = os.environ.get("LOCALAPPDATA", "").strip()
+_RUNTIME_ROOT = (
+    Path(_CONFIGURED_LOCAL_APP_DATA) if _CONFIGURED_LOCAL_APP_DATA else _FALLBACK_LOCAL_APP_DATA
+)
+if not _RUNTIME_ROOT.is_absolute():
+    _RUNTIME_ROOT = _FALLBACK_LOCAL_APP_DATA
+PROJECT_ROOT = _RUNTIME_ROOT / "LocalGearAdvisor"
 PROJECT_STAGING_RESULTS = PROJECT_ROOT / "addon" / "LocalGearAdvisor" / "Results.lua"
 PROJECT_STATE_PATH = PROJECT_ROOT / "state" / "profiles.json"
 _UNSUPPORTED_TITAN_DISC_BELT_IDS = frozenset({242664, 245964, 245965, 245966})
@@ -77,10 +80,8 @@ def _stage_packaged_addon_assets(results_path: Path) -> None:
         return
     if results_path.parent.resolve() == _SOURCE_ADDON.resolve():
         return
-    package_root = resources.files("local_gear_advisor").joinpath("addon_template")
-    for name in ("LocalGearAdvisor.toc", "Core.lua"):
-        content = package_root.joinpath(name).read_text(encoding="utf-8")
-        write_atomic_verified(results_path.parent / name, content)
+    for name, content in expected_addon_assets().items():
+        write_atomic_verified(results_path.parent / name, content.decode("utf-8"))
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,7 @@ class AnalysisSummary:
     spec_id: int
     retained_profile_count: int
     results_sha256: str
+    transport_text: str
 
 
 def analyze_export(
@@ -127,6 +129,8 @@ def analyze_export(
     staging_target: Path = PROJECT_STAGING_RESULTS,
     state_path: Path = PROJECT_STATE_PATH,
 ) -> AnalysisSummary:
+    if results_path.resolve() == (_SOURCE_ADDON / "Results.lua").resolve():
+        raise ValueError("source addon Results.lua cannot be used as analysis staging")
     ensure_staging_target(results_path, staging_target)
     profile = parse_simc_export(export_text)
     spec_id = ensure_supported_profile(profile)
@@ -305,4 +309,5 @@ def analyze_export(
         spec_id=identity.spec_id,
         retained_profile_count=len(new_state.profiles),
         results_sha256=hashlib.sha256(render_aggregate_lua(new_state).encode("utf-8")).hexdigest(),
+        transport_text=encode_profile_transport(record),
     )

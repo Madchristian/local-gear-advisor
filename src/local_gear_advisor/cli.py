@@ -4,7 +4,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from .deploy_results import expected_addon_assets, publish_results_live, utc_timestamp
+from .deploy_results import (
+    expected_addon_assets,
+    extract_addon_template,
+    publish_results_live,
+    utc_timestamp,
+)
 from .pipeline import PROJECT_ROOT, PROJECT_STAGING_RESULTS, analyze_export
 from .profilesets import SimSettings
 
@@ -36,6 +41,10 @@ def _parser() -> argparse.ArgumentParser:
         help="install the verified aggregate Results.lua after analysis (requires --addon-dir)",
     )
     analyze.add_argument("--addon-dir", type=Path)
+    stage_addon = sub.add_parser(
+        "stage-addon", help="extract a byte-verified addon folder for manual installation"
+    )
+    stage_addon.add_argument("--output", type=Path, required=True)
     sub.add_parser("gui", help="open the local desktop interface")
     return parser
 
@@ -46,6 +55,14 @@ def main(argv: list[str] | None = None) -> int:
         from .gui import launch
 
         launch()
+        return 0
+    if args.command == "stage-addon":
+        try:
+            output = extract_addon_template(args.output)
+        except Exception as exc:
+            print(f"Fehler: {exc}", file=sys.stderr)
+            return 2
+        print(f"Addon-Staging bytegenau erstellt: {output}")
         return 0
     if args.command == "analyze":
         if args.install_live and args.addon_dir is None:
@@ -107,14 +124,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Ergebnis: {summary.results_path}")
         if args.install_live:
             try:
-                expected_core, expected_toc = expected_addon_assets()
                 receipt = publish_results_live(
                     staged_results=summary.results_path,
                     canonical_state_path=summary.state_path,
                     expected_staged_sha256=summary.results_sha256,
                     addon_dir=args.addon_dir,
-                    expected_core=expected_core,
-                    expected_toc=expected_toc,
+                    expected_code_files=expected_addon_assets(),
                     receipt_path=DEFAULT_DEPLOY_RECEIPT,
                     timestamp=utc_timestamp(),
                 )

@@ -76,6 +76,24 @@ def test_cli_does_not_accept_arbitrary_output_path() -> None:
         )
 
 
+def test_cli_stage_addon_creates_a_complete_byte_verified_manual_install_source(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    output = tmp_path / "LocalGearAdvisor"
+    observed = {}
+
+    def fake_extract(destination):
+        observed["destination"] = destination
+        destination.mkdir()
+        return destination
+
+    monkeypatch.setattr("local_gear_advisor.cli.extract_addon_template", fake_extract)
+
+    assert main(["stage-addon", "--output", str(output)]) == 0
+    assert observed["destination"] == output
+    assert str(output) in capsys.readouterr().out
+
+
 def _summary(tmp_path):
     return SimpleNamespace(
         character_name="Testadin",
@@ -129,7 +147,9 @@ def test_cli_explicit_live_install_uses_pinned_staged_hash(tmp_path, monkeypatch
     observed = {}
     summary = _summary(tmp_path)
     monkeypatch.setattr("local_gear_advisor.cli.analyze_export", lambda **kwargs: summary)
-    monkeypatch.setattr("local_gear_advisor.cli.expected_addon_assets", lambda: (b"core", b"toc"))
+    monkeypatch.setattr(
+        "local_gear_advisor.cli.expected_addon_assets", lambda: {"Core.lua": b"core"}
+    )
     monkeypatch.setattr("local_gear_advisor.cli.utc_timestamp", lambda: "20260801T200000Z")
 
     def fake_publish(**kwargs):
