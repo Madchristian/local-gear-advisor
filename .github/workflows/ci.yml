@@ -34,7 +34,7 @@ jobs:
           --source tests/fixtures/sc_specialization_data.inc
           --check
       - name: Tests
-        run: uv run pytest -q
+        run: uv run python -m pytest -q
       - name: Compile Python modules
         run: uv run python -m compileall -q src tools
       - name: Build distributions
