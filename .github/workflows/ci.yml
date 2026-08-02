@@ -147,6 +147,7 @@ jobs:
                   f"{dist_root}/METADATA",
                   f"{dist_root}/WHEEL",
                   f"{dist_root}/entry_points.txt",
+                  f"{dist_root}/licenses/LICENSE.txt",
                   f"{dist_root}/RECORD",
               }
               assert set(names) - payload_names == expected_metadata
