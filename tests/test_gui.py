@@ -23,6 +23,12 @@ def test_gui_worker_uses_queue_and_close_guard() -> None:
     assert "if analysis_running:" in source
     assert "min_item_level_var = tk.IntVar(value=282)" in source
     assert "min_item_level=min_item_level_var.get()" in source
+    assert "auto_install_var = tk.BooleanVar(value=False)" in source
+    analyze_section = source[
+        source.index("    def analyze()") : source.index("    def request_close()")
+    ]
+    assert "nonlocal analysis_running, pending_summary" in analyze_section
+    assert "pending_summary = None" in analyze_section
     assert "Mindest-Itemlevel" in source
     assert "Itemlevel {summary.min_item_level}" in source
     assert "Itemlevel {min_item_level_var.get()}" not in source

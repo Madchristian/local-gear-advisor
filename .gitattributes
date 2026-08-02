@@ -10,4 +10,4 @@
 *.inc text eol=lf whitespace=-blank-at-eof
 *.md text eol=lf
 *.simc text eol=lf
-*.cmd text eol=crlf
+*.cmd -text -whitespace

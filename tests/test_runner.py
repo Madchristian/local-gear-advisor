@@ -98,6 +98,51 @@ def test_run_simc_uses_argv_shell_false_and_json2_file(tmp_path: Path) -> None:
     assert result.baseline_dps == 100000.0
 
 
+def test_run_simc_rejects_wrong_executable_basename(tmp_path: Path) -> None:
+    executable = tmp_path / "SimulationCraft.exe"
+    executable.write_bytes(b"test executable")
+    called = False
+
+    def should_not_run(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("process must not be started for a rejected executable")
+
+    with pytest.raises(SimcRunError, match="simc.exe"):
+        run_simc(
+            executable=executable,
+            input_text='paladin="Testadin"\n',
+            expected_names=set(),
+            run_root=tmp_path / "runs",
+            process_runner=should_not_run,
+        )
+
+    assert called is False
+    assert not (tmp_path / "runs").exists()
+
+
+def test_run_simc_accepts_correct_basename_case_insensitively(tmp_path: Path) -> None:
+    executable = tmp_path / "SimC.EXE"
+    executable.write_bytes(b"test executable")
+
+    def fake_run(argv, **_kwargs):
+        report_arg = next(arg for arg in argv if arg.startswith("json2="))
+        Path(report_arg.partition("=")[2]).write_text(
+            REPORT.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        return subprocess.CompletedProcess(argv, 0, stdout="ok", stderr="")
+
+    result = run_simc(
+        executable=executable,
+        input_text='paladin="Testadin"\n',
+        expected_names={"item_200101_finger1_a", "item_200101_finger2_b"},
+        run_root=tmp_path / "runs",
+        process_runner=fake_run,
+    )
+
+    assert result.baseline_dps == 100000.0
+
+
 def test_run_simc_timeout_is_a_closed_failure(tmp_path: Path) -> None:
     executable = tmp_path / "simc.exe"
     executable.write_bytes(b"test executable")

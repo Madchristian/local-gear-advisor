@@ -2,7 +2,10 @@
 
 Repository: https://github.com/Madchristian/local-gear-advisor
 
-Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MVP liest einen vollständigen `/simc`-Export einschließlich Taschengegenständen, erzeugt direkte `profileset`-Varianten, startet `simc.exe`, prüft den JSON2-Bericht und erzeugt eine `Results.lua` für ein schlankes Tooltip-Addon.
+Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MVP liest einen
+vollständigen `/simc`-Export einschließlich Taschengegenständen, erzeugt direkte
+`profileset`-Varianten, startet `simc.exe`, prüft den JSON2-Bericht und führt die Ergebnisse aller
+analysierten Charakter-/Spec-Profile in einer gemeinsamen `Results.lua` zusammen.
 
 ## Aktueller MVP
 
@@ -17,6 +20,9 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 - Ergebnisse zeigen Szenario, SimC-Version und Alter; nach sieben Tagen werden sie als veraltet behandelt
 - fail-closed bei Secret Values, nicht lesbarem Zustand oder geändertem Baseline-Profil
 - `Results.lua` wird erst nach vollständigem, geprüftem JSON2-Bericht atomar veröffentlicht
+- Schema 2 hält mehrere Charaktere und mehrere Specs pro Charakter; eine Analyse ersetzt nur die exakt passende Identität aus Region, Realm, Charaktername und numerischer Spec-ID
+- das Addon wählt ausschließlich den exakt eingeloggten Charakter und die aktive Spec; bei fehlenden, doppelten oder missgebildeten Profilen wird kein Ergebnis eines anderen Charakters angezeigt
+- die GUI kann eine abgeschlossene, hashgebundene Staging-Datei automatisch oder über einen separaten Retry sicher installieren, aber nur bei frisch und eindeutig geschlossenem WoW
 - keine Cloud, keine Telemetrie und kein Raidbots-Upload
 
 ## Noch bewusst nicht enthalten
@@ -24,8 +30,7 @@ Lokaler SimulationCraft-gestützter Gegenstandsvergleich für WoW Retail. Der MV
 - vollständige Top-Gear-Kombinatorik mehrerer gleichzeitiger Upgrades
 - belastbare defensive Tankmetrik; der MVP bewertet DPS
 - belastbare Heilermetrik; auch für Heiler ist das Ergebnis ausschließlich ein offensiver DPS-Vergleich
-- automatischer Live-Datenaustausch während WoW läuft
-- automatische Addon-Installation oder Änderung von WoW-Dateien
+- Live-Datenaustausch während WoW läuft; laufendes oder nicht sicher prüfbares WoW blockiert jeden Austausch fail-closed
 - Bewertung von Gegenständen, die nicht im importierten Taschenbereich standen
 - sichere Erkennung jedes still fehlenden SimC-Effektmodells: explizite SimC-Warnungen werden blockiert, aber ein von SimC ohne Warnung ignorierter Spezialeffekt ist im MVP noch nicht automatisch nachweisbar
 
@@ -74,7 +79,8 @@ werden erfolgreiche Ergebnisse und Addon-Stagingdateien unter folgendem Benutzer
 %LOCALAPPDATA%\LocalGearAdvisor\addon\LocalGearAdvisor
 ```
 
-Auch dort erfolgt keine automatische Kopie in die WoW-Installation.
+Auch dort bleibt das Staging die Quelle. Eine Live-Installation erfolgt nur über die ausdrücklich
+aktivierte GUI-Option oder CLI-Option und ausschließlich nach den Sicherheitsprüfungen.
 
 ## GUI
 
@@ -98,20 +104,22 @@ Unter Git Bash:
 
 In der GUI:
 
-1. `simc.exe` auswählen.
-2. In WoW `/simc` ausführen; nicht `nobags` verwenden.
-3. Den gesamten Export einfügen oder aus einer UTF-8-Datei laden.
-4. `Patchwerk` für Single Target oder `DungeonSlice` als experimentelles M+-Szenario auswählen.
-5. Mindest-Itemlevel festlegen (`282` ist Standard, `0` deaktiviert den Filter).
-6. „Lokal analysieren“ drücken.
+1. Die Kommandozeilendatei `simc.exe` auswählen; `SimulationCraft.exe` wird abgelehnt.
+2. Den installierten `Interface/AddOns/LocalGearAdvisor`-Ordner auswählen. Bei genau einem eindeutigen Standardfund wird er nur lesend vorausgewählt.
+3. In WoW `/simc` ausführen; nicht `nobags` verwenden.
+4. Den gesamten Export einfügen oder aus einer UTF-8-Datei laden.
+5. `Patchwerk` für Single Target oder `DungeonSlice` als experimentelles M+-Szenario auswählen.
+6. Mindest-Itemlevel festlegen (`282` ist Standard, `0` deaktiviert den Filter).
+7. „Lokal analysieren“ drücken.
 
-Das Ergebnis wird ausschließlich im jeweiligen Staging-Verzeichnis erzeugt. Im Repository ist das:
+Das gemeinsame Ergebnis und sein kanonischer JSON-Zustand werden zuerst im Staging erzeugt. Im Repository sind das:
 
 ```text
 addon/LocalGearAdvisor/Results.lua
+state/profiles.json
 ```
 
-Es erfolgt keine automatische Installation in den WoW-Ordner.
+Ist die Auto-Installation aktiviert, wird danach ausschließlich `Results.lua` übernommen. Läuft WoW oder ist sein Zustand unbekannt, bleibt das Staging erhalten. Nach dem Schließen von WoW kann „Jetzt installieren“ dieselbe validierte SHA-256-Datei übernehmen, ohne SimC erneut zu starten. `Core.lua`, die TOC und SavedVariables werden dabei nie überschrieben; sie werden auf Kompatibilität beziehungsweise Unverändertheit geprüft.
 
 ## CLI
 
@@ -123,6 +131,28 @@ Es erfolgt keine automatische Installation in den WoW-Ordner.
   --min-item-level 282 \
   --fight-style Patchwerk
 ```
+
+Die CLI bleibt standardmäßig staging-only. Eine Live-Installation muss ausdrücklich aktiviert und auf den Addonordner begrenzt werden:
+
+```text
+.venv/Scripts/local-gear-advisor.exe analyze \
+  --input character.simc \
+  --simc "C:/SimulationCraft/simc.exe" \
+  --install-live \
+  --addon-dir "D:/World of Warcraft/_retail_/Interface/AddOns/LocalGearAdvisor"
+```
+
+Vorhandene, vom Projektgenerator erzeugte Schema-1-Archive können ohne Lua-Ausführung eng und explizit in den gemeinsamen Schema-2-Zustand migriert werden:
+
+```text
+.venv/Scripts/python.exe tools/import_v1_results.py archive-a/Results.lua archive-b/Results.lua
+```
+
+Der Migrationsparser akzeptiert nur eine einzelne literale `LocalGearAdvisorResults`-Zuweisung mit dem exakten alten Feldschema; Lua-Aufrufe, Zusatzfelder, doppelte Schlüssel und andere Strukturen werden abgelehnt.
+
+## Datenquellen und Armory-Grenzen
+
+Battle.net Armory kann künftig optional eine Charakterliste, öffentliche Profildaten und angelegte Ausrüstung liefern. Sie enthält jedoch nicht zuverlässig Taschen, Charakterbank, Reagenzbank, Kriegsmeutenbank oder alle lokalen Itemvarianten. Sie ist daher kein Ersatz für einen vollständigen lokalen `/simc`-Export. Eine spätere Armory-Integration bleibt opt-in und benötigt vor Umsetzung einen festgelegten OAuth-, Datenschutz-, Region-/Realm-, Rate-Limit-, Cache- und Fail-Closed-Vertrag. Für vollständige Kandidatendaten bleibt `/simc` Standard; langfristig kann ein accountweiter lokaler Addon-Sammler bereits geladene Ausrüstung, Taschen und Bankbereiche in SavedVariables erfassen.
 
 ## Tests und Abnahme
 
@@ -144,8 +174,10 @@ Die nachvollziehbare MVP-Abnahmematrix steht in [`docs/ACCEPTANCE.md`](docs/ACCE
 - Subprozesse verwenden eine Argumentliste mit `shell=False`.
 - Ein SimC-Fehler, Timeout, Warn-/Fehlerlog, fehlende Provenienz, abweichendes Szenario, falsche DBC-/WoW-Version, abweichende Iterationszahl, fehlender JSON2-Bericht oder unvollständiges Profileset-Ergebnis blockiert die Veröffentlichung.
 - Ein fehlendes, strukturell ungültiges oder nicht zur gemeldeten SimC-Git-Revision passendes Spezialisierungsregister blockiert die Veröffentlichung. Die Build-/CI-Prüfung stellt zusätzlich sicher, dass das eingecheckte Register bytegenau aus dem gepinnten Quell-Snapshot reproduzierbar ist. Unbekannte Klassen-/Spec-Paare bleiben fail-closed.
-- CLI und GUI dürfen ausschließlich die festgelegte lokale Stagingdatei `addon/LocalGearAdvisor/Results.lua` schreiben. Direkte WoW-/SavedVariables-Ausgabepfade werden nicht akzeptiert.
-- Das Projekt beendet WoW niemals selbst und installiert das Addon nicht automatisch.
+- Analyse und Migration veröffentlichen ausschließlich in die festgelegte lokale Stagingdatei. Die optionale Result-only-Installation akzeptiert nur einen normalen, nicht umgeleiteten `Interface/AddOns/LocalGearAdvisor`-Pfad mit exakt kompatiblem `Core.lua` und TOC.
+- Der kanonische Mehrprofilzustand und seine Lua-Projektion werden unter einem gemeinsamen OS-Lock veröffentlicht. Ein pfadgebundenes Journal bindet alte und neue Hashgenerationen, restauriert kontrollierte Fehler sofort und repariert nach einem Prozessabbruch nur bekannte Zwischenzustände; eine fremde Generation wird fail-closed erhalten.
+- Vor der Result-only-Veröffentlichung werden Zielinventar, Staging-Hash und die bytegenaue Projektion aus dem streng validierten kanonischen JSON-State geprüft. Ein an den kanonischen Zielpfad statt an den frei wählbaren Receipt-Pfad gebundener OS-Lock serialisiert alle kooperierenden Publisher für dieselbe `Results.lua`. Gesperrte Verzeichnisidentitäten sowie write-/replace-gesperrte Handles auf `Core.lua` und TOC verhindern einen inkompatiblen Codeaustausch während Recovery und Veröffentlichung. Frische WoW-Prüfungen unmittelbar vor jedem vorbereitenden Live-Tree-Write, jedem Recovery-Link, Rename, Publish und jeder kontrollierten Bereinigung schützen den Vorgang. Die alte Generation wird atomar in ein eindeutiges Backup außerhalb von `AddOns` verschoben; die neue Generation wird ausschließlich per Create-if-absent veröffentlicht und anschließend gelesen und gehasht. Ein persistentes Journal repariert einen Prozessabbruch zwischen diesen Schritten. Eine konkurrierende fremde Generation wird niemals überschrieben. Nach einer bereits verifizierten Veröffentlichung wird bei einem späteren Receipt-, SavedVariables- oder Prozessfehler kein automatischer Rollback mehr versucht; die neue Generation und das Backup bleiben zur sicheren Prüfung erhalten. Receipt und Pending-Journal liegen vollständig außerhalb des WoW-Retail-Baums; der zielgebundene Publisher-Lock liegt im normalen Benutzer-Temp-Verzeichnis und wird zusätzlich gegen den Retail-Baum geprüft. Das Receipt speichert für SavedVariables nur Anzahl und Gesamtdigest, keine persönlichen Pfade. Schema-2-DPS-Werte sind auf `0..10^12` und Delta-Prozentwerte auf `±10^6` begrenzt; darüber liegende Daten werden in Python und Lua fail-closed verworfen.
+- Das Projekt beendet WoW niemals selbst. `running` und `unknown` blockieren fail-closed.
 - Forschungspakete, Runs, Logs und echte Charakterexporte liegen unter ignorierten Verzeichnissen und gehören nicht in Git.
 
 ## Grenzen der Aussage

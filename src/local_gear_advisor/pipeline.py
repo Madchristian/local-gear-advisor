@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 from collections.abc import Callable
@@ -8,16 +9,18 @@ from importlib import resources
 from pathlib import Path
 
 from .profilesets import SimSettings, build_profileset_input
-from .results import (
-    ensure_supported_profile,
-    evaluate_results,
-    render_results_lua,
-    write_atomic_verified,
-)
+from .results import ensure_supported_profile, evaluate_results, write_atomic_verified
 from .runner import ParsedSimcReport, SimcRunError, run_simc
 from .safety import ensure_staging_target
 from .simc_export import MAX_VALID_ITEM_LEVEL, MIN_VALID_ITEM_LEVEL, parse_simc_export
 from .spec_registry import load_spec_registry
+from .state import (
+    ProfileItem,
+    ProfileRecord,
+    normalize_identity,
+    publish_profile_update,
+    render_aggregate_lua,
+)
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_ADDON = _SOURCE_ROOT / "addon" / "LocalGearAdvisor"
@@ -28,6 +31,7 @@ else:
         Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "LocalGearAdvisor"
     )
 PROJECT_STAGING_RESULTS = PROJECT_ROOT / "addon" / "LocalGearAdvisor" / "Results.lua"
+PROJECT_STATE_PATH = PROJECT_ROOT / "state" / "profiles.json"
 _UNSUPPORTED_TITAN_DISC_BELT_IDS = frozenset({242664, 245964, 245965, 245966})
 _REQUIRED_BASELINE_SLOTS = frozenset(
     {
@@ -47,6 +51,24 @@ _REQUIRED_BASELINE_SLOTS = frozenset(
         "trinket2",
         "main_hand",
     }
+)
+_BASELINE_SLOTS = (
+    "head",
+    "neck",
+    "shoulder",
+    "back",
+    "chest",
+    "wrist",
+    "hands",
+    "waist",
+    "legs",
+    "feet",
+    "finger1",
+    "finger2",
+    "trinket1",
+    "trinket2",
+    "main_hand",
+    "off_hand",
 )
 
 
@@ -77,6 +99,7 @@ class AnalysisSummary:
     variant_count: int
     simc_version: str
     results_path: Path
+    state_path: Path
     excluded_weapon_count: int
     excluded_weapons: tuple[ExcludedCandidate, ...]
     excluded_below_min_item_level_count: int
@@ -84,6 +107,11 @@ class AnalysisSummary:
     excluded_unknown_item_level_count: int
     excluded_unknown_item_level: tuple[ExcludedCandidate, ...]
     min_item_level: int
+    region: str
+    realm: str
+    spec_id: int
+    retained_profile_count: int
+    results_sha256: str
 
 
 def analyze_export(
@@ -97,10 +125,11 @@ def analyze_export(
     timeout_seconds: int = 900,
     simc_runner: Callable[..., ParsedSimcReport] = run_simc,
     staging_target: Path = PROJECT_STAGING_RESULTS,
+    state_path: Path = PROJECT_STATE_PATH,
 ) -> AnalysisSummary:
     ensure_staging_target(results_path, staging_target)
     profile = parse_simc_export(export_text)
-    ensure_supported_profile(profile)
+    spec_id = ensure_supported_profile(profile)
     if profile.warnings:
         details = "; ".join(
             f"line {warning.line_number}: {warning.message}" for warning in profile.warnings
@@ -212,11 +241,50 @@ def analyze_export(
         )
     timestamp = int(time.time()) if generated_at is None else generated_at
     evaluation = evaluate_results(profile, built, report, generated_at=timestamp)
-    lua = render_results_lua(profile, built, evaluation)
+
+    identity = normalize_identity(
+        region=profile.region, realm=profile.server, name=profile.character_name, spec_id=spec_id
+    )
+    record = ProfileRecord(
+        identity=identity,
+        character_class=profile.character_class,
+        spec=profile.spec,
+        level=profile.level,
+        race=profile.race,
+        talents=profile.talents,
+        trait_systems=dict(profile.trait_systems),
+        baseline_gear={
+            slot: (profile.equipped[slot].options if slot in profile.equipped else None)
+            for slot in _BASELINE_SLOTS
+        },
+        fight_style=evaluation.fight_style,
+        baseline_dps=evaluation.baseline_dps,
+        simc_version=evaluation.simc_version,
+        simc_revision=evaluation.git_revision,
+        game_version=evaluation.game_version,
+        dbc_source=evaluation.dbc_source,
+        profile_hash=built.profile_hash,
+        generated_at=evaluation.generated_at,
+        items=tuple(
+            ProfileItem(
+                options=item.options,
+                item_id=item.item_id,
+                item_name=item.item_name,
+                fingerprint=item.fingerprint,
+                best_slot=item.best_slot,
+                candidate_dps=item.candidate_dps,
+                delta_percent=item.delta_percent,
+                iterations=item.iterations,
+            )
+            for item in evaluation.items
+        ),
+    )
 
     # The destination was allowlisted before simulation; these are the only staging writes.
     _stage_packaged_addon_assets(results_path)
-    write_atomic_verified(results_path, lua)
+    new_state = publish_profile_update(
+        state_path=state_path, results_path=results_path, record=record
+    )
     return AnalysisSummary(
         character_name=profile.character_name,
         spec=profile.spec,
@@ -224,6 +292,7 @@ def analyze_export(
         variant_count=len(built.variants),
         simc_version=report.simc_version,
         results_path=results_path.resolve(),
+        state_path=state_path.resolve(),
         excluded_weapon_count=len(excluded_weapons),
         excluded_weapons=excluded_weapons,
         excluded_below_min_item_level_count=len(excluded_below_min_item_level),
@@ -231,4 +300,9 @@ def analyze_export(
         excluded_unknown_item_level_count=len(excluded_unknown_item_level),
         excluded_unknown_item_level=excluded_unknown_item_level,
         min_item_level=settings.min_item_level,
+        region=identity.region,
+        realm=identity.realm,
+        spec_id=identity.spec_id,
+        retained_profile_count=len(new_state.profiles),
+        results_sha256=hashlib.sha256(render_aggregate_lua(new_state).encode("utf-8")).hexdigest(),
     )

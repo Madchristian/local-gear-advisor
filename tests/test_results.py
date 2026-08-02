@@ -7,7 +7,6 @@ from local_gear_advisor.profilesets import SimSettings, build_profileset_input
 from local_gear_advisor.results import (
     ensure_supported_profile,
     evaluate_results,
-    render_results_lua,
     write_atomic_verified,
 )
 from local_gear_advisor.runner import ParsedSimcReport
@@ -47,37 +46,6 @@ def test_evaluation_selects_best_ring_and_trinket_target() -> None:
     assert ring.candidate_dps == 102000.0
     assert ring.delta_percent == pytest.approx(2.0)
     assert trinket.best_slot == "trinket2"
-
-
-def test_lua_is_keyed_by_exact_simc_item_options() -> None:
-    profile, built, result = _evaluation()
-    lua = render_results_lua(profile, built, result)
-
-    assert "LocalGearAdvisorResults = {" in lua
-    assert '[",id=200101,gem_id=3001/0/3002,bonus_id=50/51"]' in lua
-    assert 'bestSlot = "finger2"' in lua
-    assert 'profileHash = "' + built.profile_hash + '"' in lua
-    assert 'simcVersion = "1205-01"' in lua
-    assert 'gameVersion = "12.0.7.68887"' in lua
-    assert 'dbcSource = "Live"' in lua
-    assert 'region = "eu"' in lua
-    assert 'server = "testrealm"' in lua
-    assert "specID = 66" in lua
-    assert "level = 90" in lua
-    assert 'race = "maghar_orc"' in lua
-    assert 'talents = "CYQA..."' in lua
-    assert 'omnium_talents = "100:1/200:1"' in lua
-    assert 'finger1 = ",id=100101,enchant_id=7001,bonus_id=10/20"' in lua
-    assert "deltaPercent = 2" in lua
-
-
-def test_lua_records_legal_empty_offhand_explicitly() -> None:
-    text = FIXTURE.read_text(encoding="utf-8").replace(
-        "# Equipped Shield (250)\noff_hand=,id=100301,bonus_id=40\n", ""
-    )
-    profile, built, result = _evaluation(text)
-
-    assert "    off_hand = false," in render_results_lua(profile, built, result)
 
 
 def test_atomic_writer_rejects_concurrent_publication_lock(tmp_path: Path) -> None:

@@ -140,6 +140,11 @@ def run_simc(
     process_runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> ParsedSimcReport:
     executable = executable.resolve()
+    if executable.name.casefold() != "simc.exe":
+        raise SimcRunError(
+            f"executable must be named simc.exe, got {executable.name!r}; "
+            "SimulationCraft.exe and other basenames are rejected"
+        )
     if not executable.is_file():
         raise SimcRunError(f"simc executable does not exist: {executable}")
     if timeout_seconds < 1:

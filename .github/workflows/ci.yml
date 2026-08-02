@@ -1,3 +1,6 @@
+---
+# yamllint disable rule:truthy
+# yamllint disable rule:line-length
 name: CI
 
 on:
@@ -12,16 +15,18 @@ jobs:
   test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.11"
       - name: Install uv
-        run: python -m pip install uv
+        run: python -m pip install uv==0.12.0
       - name: Install project and development dependencies
         run: uv sync --frozen --group dev
       - name: Ruff
         run: uv run ruff check src tests tools
+      - name: Ruff format
+        run: uv run ruff format --check src tests tools
       - name: Verify generated specialization registry
         run: >-
           uv run python tools/generate_spec_registry.py
@@ -34,24 +39,126 @@ jobs:
         run: uv run python -m compileall -q src tools
       - name: Build distributions
         run: uv build
+      - name: Verify sdist is byte-exact to Git sources
+        shell: python
+        run: |
+          import subprocess, tarfile, tomllib
+          from pathlib import Path, PurePosixPath
+          archive = next(Path("dist").glob("*.tar.gz"))
+          tracked = {
+              value.decode("utf-8"): Path(value.decode("utf-8")).read_bytes()
+              for value in subprocess.check_output(["git", "ls-files", "-z"]).split(b"\0")
+              if value
+          }
+          project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
+          assert project["name"] == "local-gear-advisor"
+          expected_root = f"local_gear_advisor-{project['version']}"
+          with tarfile.open(archive, "r:gz") as package:
+              members = package.getmembers()
+              names = [member.name for member in members]
+              assert len(names) == len(set(names)), "sdist contains duplicate member names"
+              assert all(member.isfile() for member in members), (
+                  "sdist contains directories, links or special members"
+              )
+              paths = [PurePosixPath(name) for name in names]
+              assert all(
+                  name == path.as_posix()
+                  and "\\" not in name
+                  and not path.is_absolute()
+                  and ".." not in path.parts
+                  and len(path.parts) >= 2
+                  for name, path in zip(names, paths, strict=True)
+              ), "sdist contains a non-canonical or unsafe member path"
+              roots = {path.parts[0] for path in paths}
+              assert roots == {expected_root}, f"unexpected sdist roots: {sorted(roots)}"
+              root = expected_root
+              files = members
+              packaged = {}
+              for member in files:
+                  relative = PurePosixPath(member.name).relative_to(root).as_posix()
+                  assert relative not in packaged, f"duplicate normalized sdist member: {relative}"
+                  stream = package.extractfile(member)
+                  assert stream is not None, member.name
+                  packaged[relative] = stream.read()
+          assert set(packaged) - set(tracked) == {"PKG-INFO"}
+          assert set(tracked) - set(packaged) == set()
+          for name, content in tracked.items():
+              assert packaged[name] == content, name
       - name: Verify wheel addon assets
         shell: python
         run: |
+          import base64
+          import csv
+          import hashlib
+          import io
           import pathlib
+          import subprocess
           import zipfile
 
           wheel = next(pathlib.Path("dist").glob("*.whl"))
-          required = {
-              "local_gear_advisor/addon_template/Core.lua",
-              "local_gear_advisor/addon_template/LocalGearAdvisor.toc",
-              "local_gear_advisor/addon_template/Results.lua",
-              "local_gear_advisor/data/spec_registry.json",
-          }
+          expected = {}
+          tracked = [
+              value.decode("utf-8")
+              for value in subprocess.check_output(["git", "ls-files", "-z"]).split(b"\0")
+              if value
+          ]
+          source_prefix = "src/local_gear_advisor/"
+          for name in tracked:
+              if name.startswith(source_prefix):
+                  expected["local_gear_advisor/" + name[len(source_prefix):]] = (
+                      pathlib.Path(name).read_bytes()
+                  )
+          for name in ("Core.lua", "LocalGearAdvisor.toc", "Results.lua"):
+              expected[f"local_gear_advisor/addon_template/{name}"] = (
+                  pathlib.Path("addon/LocalGearAdvisor", name).read_bytes()
+              )
+
           with zipfile.ZipFile(wheel) as archive:
-              names = set(archive.namelist())
-          missing = required - names
-          if missing:
-              raise SystemExit(f"wheel is missing addon assets: {sorted(missing)}")
+              assert archive.testzip() is None, "wheel CRC verification failed"
+              names = archive.namelist()
+              assert len(names) == len(set(names)), "wheel contains duplicate member names"
+              payload_names = {
+                  name for name in names if not name.split("/", 1)[0].endswith(".dist-info")
+              }
+              assert payload_names == set(expected), (
+                  f"wheel payload mismatch: missing={sorted(set(expected) - payload_names)}, "
+                  f"extra={sorted(payload_names - set(expected))}"
+              )
+              for name, content in expected.items():
+                  assert archive.read(name) == content, name
+
+              dist_roots = {
+                  name.split("/", 1)[0]
+                  for name in names
+                  if name.split("/", 1)[0].endswith(".dist-info")
+              }
+              assert len(dist_roots) == 1, f"unexpected dist-info roots: {sorted(dist_roots)}"
+              dist_root = next(iter(dist_roots))
+              expected_metadata = {
+                  f"{dist_root}/METADATA",
+                  f"{dist_root}/WHEEL",
+                  f"{dist_root}/entry_points.txt",
+                  f"{dist_root}/RECORD",
+              }
+              assert set(names) - payload_names == expected_metadata
+
+              record_name = f"{dist_root}/RECORD"
+              rows = list(csv.reader(io.StringIO(archive.read(record_name).decode("utf-8"))))
+              record_paths = [row[0] for row in rows]
+              assert len(record_paths) == len(set(record_paths))
+              assert set(record_paths) == set(names)
+              for name, digest, size in rows:
+                  if name == record_name:
+                      assert digest == "" and size == ""
+                      continue
+                  data = archive.read(name)
+                  encoded = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=")
+                  assert digest == "sha256=" + encoded.decode("ascii"), name
+                  assert int(size) == len(data), name
+
+          results = expected["local_gear_advisor/addon_template/Results.lua"]
+          if b"schemaVersion = 2" not in results or b"profiles = {}" not in results:
+              raise SystemExit("wheel Results.lua is not the empty schema-2 placeholder")
       - name: Verify specialization registry from built wheel
         shell: python
         run: |
@@ -66,6 +173,26 @@ jobs:
           assert len(registry.specs) == 40
           assert registry.specs[("druid", "guardian")] == 104
           assert registry.specs[("demonhunter", "devourer")] == 1480
+      - name: Install wheel in isolation
+        shell: python
+        run: |
+          import pathlib
+          import subprocess
+          import sys
+
+          wheel = next(pathlib.Path("dist").glob("*.whl")).resolve()
+          target = pathlib.Path(".ci-wheel").resolve()
+          subprocess.run(
+              [sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(target), str(wheel)],
+              check=True,
+          )
+          sys.path.insert(0, str(target))
+          import local_gear_advisor
+          import local_gear_advisor.cli
+          import local_gear_advisor.gui
+          from local_gear_advisor.deploy_results import expected_addon_assets
+
+          assert all(expected_addon_assets())
       - name: Verify specialization registry from built sdist
         shell: python
         run: |
@@ -81,8 +208,19 @@ jobs:
           )
           sys.path.insert(0, str(target))
           from local_gear_advisor.spec_registry import load_spec_registry
+          from local_gear_advisor.deploy_results import expected_addon_assets
 
           registry = load_spec_registry()
           assert len(registry.specs) == 40
           assert registry.specs[("druid", "guardian")] == 104
           assert registry.specs[("demonhunter", "devourer")] == 1480
+          core, toc = expected_addon_assets()
+          source = pathlib.Path("addon/LocalGearAdvisor")
+          assert core == (source / "Core.lua").read_bytes()
+          assert toc == (source / "LocalGearAdvisor.toc").read_bytes()
+          installed_results = (
+              target / "local_gear_advisor" / "addon_template" / "Results.lua"
+          ).read_bytes()
+          assert installed_results == (source / "Results.lua").read_bytes()
+          assert b"schemaVersion = 2" in installed_results
+          assert b"profiles = {}" in installed_results

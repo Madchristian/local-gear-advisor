@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [dependency-groups]
-dev = ["luaparser>=4.0", "pytest>=9.0", "ruff>=0.16"]
+dev = ["luaparser>=4.0", "lupa>=2.0", "pytest>=9.0", "ruff>=0.16"]
 
 [project.scripts]
 local-gear-advisor = "local_gear_advisor.cli:main"

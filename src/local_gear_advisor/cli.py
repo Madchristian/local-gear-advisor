@@ -4,11 +4,13 @@ import argparse
 import sys
 from pathlib import Path
 
+from .deploy_results import expected_addon_assets, publish_results_live, utc_timestamp
 from .pipeline import PROJECT_ROOT, PROJECT_STAGING_RESULTS, analyze_export
 from .profilesets import SimSettings
 
 DEFAULT_RESULTS = PROJECT_STAGING_RESULTS
 DEFAULT_RUN_ROOT = PROJECT_ROOT / "state" / "runs"
+DEFAULT_DEPLOY_RECEIPT = PROJECT_ROOT / "state" / "live-results-receipt.json"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -28,6 +30,12 @@ def _parser() -> argparse.ArgumentParser:
         "--fight-style", choices=("Patchwerk", "DungeonSlice"), default="Patchwerk"
     )
     analyze.add_argument("--timeout", type=int, default=900)
+    analyze.add_argument(
+        "--install-live",
+        action="store_true",
+        help="install the verified aggregate Results.lua after analysis (requires --addon-dir)",
+    )
+    analyze.add_argument("--addon-dir", type=Path)
     sub.add_parser("gui", help="open the local desktop interface")
     return parser
 
@@ -40,6 +48,14 @@ def main(argv: list[str] | None = None) -> int:
         launch()
         return 0
     if args.command == "analyze":
+        if args.install_live and args.addon_dir is None:
+            print("Fehler: --install-live erfordert --addon-dir.", file=sys.stderr)
+            return 2
+        if args.addon_dir is not None and not args.install_live:
+            print(
+                "Fehler: --addon-dir darf nur mit --install-live verwendet werden.", file=sys.stderr
+            )
+            return 2
         try:
             summary = analyze_export(
                 export_text=args.input.read_text(encoding="utf-8"),
@@ -60,6 +76,10 @@ def main(argv: list[str] | None = None) -> int:
             f"OK: {summary.character_name} ({summary.spec}), "
             f"{summary.candidate_count} Items / {summary.variant_count} Varianten, "
             f"SimC {summary.simc_version}"
+        )
+        print(
+            f"Profil: {summary.region}/{summary.realm}/{summary.character_name}/"
+            f"Spec {summary.spec_id}; {summary.retained_profile_count} gespeicherte Profile."
         )
         print("Hinweis: Nur offensiver DPS-Vergleich; keine defensive Tank- oder Heilermetrik.")
         if summary.excluded_weapon_count:
@@ -85,6 +105,26 @@ def main(argv: list[str] | None = None) -> int:
                 "unbekanntem oder ungültigem Itemlevel."
             )
         print(f"Ergebnis: {summary.results_path}")
+        if args.install_live:
+            try:
+                expected_core, expected_toc = expected_addon_assets()
+                receipt = publish_results_live(
+                    staged_results=summary.results_path,
+                    canonical_state_path=summary.state_path,
+                    expected_staged_sha256=summary.results_sha256,
+                    addon_dir=args.addon_dir,
+                    expected_core=expected_core,
+                    expected_toc=expected_toc,
+                    receipt_path=DEFAULT_DEPLOY_RECEIPT,
+                    timestamp=utc_timestamp(),
+                )
+            except Exception as exc:
+                print(
+                    f"Installation blockiert/fehlgeschlagen; Staging bleibt erhalten: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(f"Installiert: {receipt.addon_dir} (Backup: {receipt.backup})")
         return 0
     return 2
 

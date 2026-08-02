@@ -8,7 +8,6 @@ local L = GetLocale() == "deDE" and {
   dpsOnly = "Nur offensiver DPS-Vergleich",
   stale = "Ergebnis veraltet",
   noProfile = "Keine gültigen Simulationsdaten",
-  character = "anderer Charakter",
   classSpec = "andere Spezialisierung",
   identity = "Stufe oder Volk geändert",
   gameBuild = "andere WoW-/SimC-Datenversion",
@@ -30,7 +29,6 @@ local L = GetLocale() == "deDE" and {
   dpsOnly = "Offensive DPS comparison only",
   stale = "Result is stale",
   noProfile = "No valid simulation data",
-  character = "different character",
   classSpec = "different specialization",
   identity = "level or race changed",
   gameBuild = "different WoW/SimC data version",
@@ -86,13 +84,14 @@ local function IsNonEmptyString(value)
 end
 
 local function Tokenize(value)
-  if type(value) ~= "string" or IsSecret(value) then return nil end
+  if IsSecret(value) or type(value) ~= "string" then return nil end
   value = string.lower(value):gsub(" ", "_")
   value = value:gsub("[^%w%%+%._\128-\255]", "")
   return value:gsub("_+$", "")
 end
 
 local REGION_NAMES = { [1] = "us", [2] = "kr", [3] = "eu", [4] = "tw", [5] = "cn" }
+local VALID_REGIONS = { us=true, kr=true, eu=true, tw=true, cn=true }
 local MAX_RESULT_AGE = 7 * 24 * 60 * 60
 
 local function RaceToken(value)
@@ -112,7 +111,7 @@ local function SafeNumber(value)
 end
 
 local function SplitItemLink(itemLink)
-  if type(itemLink) ~= "string" or IsSecret(itemLink) then return nil end
+  if IsSecret(itemLink) or type(itemLink) ~= "string" then return nil end
   local itemString = string.match(itemLink, "item:([%-?%d:]+)")
   if not itemString then return nil end
   local values = {}
@@ -235,60 +234,158 @@ local function CurrentTraitString(systemID)
   return table.concat(entries, "/")
 end
 
-local validityOK, validityReason = false, L.noProfile
+-- Structural/schema check for one aggregate entry. Every field required by
+-- the deep runtime validation below must already be present and well typed
+-- here so a tampered or partially-generated profile can never reach it.
+local PROFILE_KEYS = {
+  region=true, server=true, characterName=true, class=true, spec=true, specID=true,
+  level=true, race=true, talents=true, traitSystems=true, baselineGear=true,
+  fightStyle=true, baselineDps=true, simcVersion=true, simcRevision=true,
+  gameVersion=true, dbcSource=true, profileHash=true, generatedAt=true, items=true,
+}
+local ITEM_KEYS = {
+  itemID=true, name=true, fingerprint=true, bestSlot=true, candidateDps=true,
+  deltaPercent=true, iterations=true, status=true,
+}
+local RESULT_SLOTS = {}
+for _, slot in ipairs(BASELINE_SLOTS) do RESULT_SLOTS[slot] = true end
 
-local function CheckValidity()
-  local results = LocalGearAdvisorResults
-  if type(results) ~= "table"
-      or results.schemaVersion ~= 1
-      or not IsFiniteNumber(results.generatedAt)
-      or results.generatedAt <= 0
-      or results.generatedAt % 1 ~= 0
-      or not IsNonEmptyString(results.characterName)
-      or not IsNonEmptyString(results.region)
-      or not IsNonEmptyString(results.server)
-      or not IsNonEmptyString(results.class)
-      or not IsFiniteNumber(results.specID)
-      or results.specID % 1 ~= 0
-      or not IsFiniteNumber(results.level)
-      or results.level % 1 ~= 0
-      or not IsNonEmptyString(results.race)
-      or not IsNonEmptyString(results.talents)
-      or type(results.traitSystems) ~= "table"
-      or type(results.traitSystems.omnium_talents) ~= "string"
-      or type(results.baselineGear) ~= "table"
-      or not IsNonEmptyString(results.fightStyle)
-      or not IsNonEmptyString(results.simcVersion)
-      or not IsNonEmptyString(results.simcRevision)
-      or not IsNonEmptyString(results.gameVersion)
-      or results.dbcSource ~= "Live"
-      or not IsNonEmptyString(results.profileHash)
-      or #results.profileHash ~= 64
-      or not results.profileHash:match("^[0-9a-f]+$")
-      or type(results.items) ~= "table" then
-    validityOK, validityReason = false, L.noProfile
-    return validityOK, validityReason
+local function HasExactKeys(value, allowed)
+  if IsSecret(value) or type(value) ~= "table" then return false end
+  local found = 0
+  local expected = 0
+  for key in pairs(allowed) do expected = expected + 1 end
+  for key in pairs(value) do
+    if IsSecret(key) or not allowed[key] then return false end
+    found = found + 1
   end
-  local now = time()
-  if not IsFiniteNumber(now) or results.generatedAt > now + 300 then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
-  end
-  if now - results.generatedAt > MAX_RESULT_AGE then
-    validityOK, validityReason = false, L.expired
-    return validityOK, validityReason
-  end
-  local wowVersion, wowBuild = GetBuildInfo()
-  if IsSecret(wowVersion) or IsSecret(wowBuild)
-      or type(wowVersion) ~= "string" or type(wowBuild) ~= "string" then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
-  end
-  if wowVersion .. "." .. wowBuild ~= results.gameVersion then
-    validityOK, validityReason = false, L.gameBuild
-    return validityOK, validityReason
-  end
+  return found == expected
+end
 
+local function CanonicalOptionsItemID(options)
+  if not IsNonEmptyString(options) then return nil end
+  local itemID = options:match("^,id=([1-9]%d*)")
+  if not itemID then return nil end
+  local consumed = ",id=" .. itemID
+  local remainder = options:sub(#consumed + 1)
+  local seen = { id=true }
+  while remainder ~= "" do
+    local segment, key = remainder:match("^(,([a-z_]+)=[^,\r\n]+)")
+    if not segment or seen[key] then return nil end
+    seen[key] = true
+    remainder = remainder:sub(#segment + 1)
+  end
+  return tonumber(itemID)
+end
+
+local function IsValidItem(options, item)
+  local optionItemID = CanonicalOptionsItemID(options)
+  return IsNonEmptyString(options)
+      and optionItemID ~= nil
+      and HasExactKeys(item, ITEM_KEYS)
+      and IsFiniteNumber(item.itemID) and item.itemID > 0 and item.itemID <= 10000000
+      and item.itemID % 1 == 0
+      and tonumber(optionItemID) == item.itemID
+      and not IsSecret(item.name) and (item.name == false or IsNonEmptyString(item.name))
+      and IsNonEmptyString(item.fingerprint) and #item.fingerprint == 64
+      and item.fingerprint:match("^[0-9a-f]+$") ~= nil
+      and IsNonEmptyString(item.bestSlot) and RESULT_SLOTS[item.bestSlot] == true
+      and IsFiniteNumber(item.candidateDps) and item.candidateDps >= 0
+      and item.candidateDps <= 1000000000000
+      and IsFiniteNumber(item.deltaPercent) and math.abs(item.deltaPercent) <= 1000000
+      and IsFiniteNumber(item.iterations) and item.iterations >= 100
+      and item.iterations <= 1000000 and item.iterations % 1 == 0
+      and not IsSecret(item.status) and item.status == "simulated"
+end
+
+local function IsValidProfileShape(profile)
+  if not HasExactKeys(profile, PROFILE_KEYS)
+      or not IsNonEmptyString(profile.region)
+      or string.lower(profile.region) ~= profile.region
+      or VALID_REGIONS[profile.region] ~= true
+  then return false end
+  if not IsNonEmptyString(profile.server) or Tokenize(profile.server) ~= profile.server
+      or not IsNonEmptyString(profile.characterName)
+      or not IsFiniteNumber(profile.specID) or profile.specID <= 0 or profile.specID > 10000
+      or profile.specID % 1 ~= 0
+      or not IsNonEmptyString(profile.class) or string.lower(profile.class) ~= profile.class
+      or not IsNonEmptyString(profile.spec) or string.lower(profile.spec) ~= profile.spec
+      or not IsFiniteNumber(profile.level) or profile.level <= 0 or profile.level > 90
+      or profile.level % 1 ~= 0
+      or not IsNonEmptyString(profile.race) or string.lower(profile.race) ~= profile.race
+      or not IsNonEmptyString(profile.talents)
+      or not HasExactKeys(profile.traitSystems, {omnium_talents=true})
+      or IsSecret(profile.traitSystems.omnium_talents)
+      or type(profile.traitSystems.omnium_talents) ~= "string"
+      or not HasExactKeys(profile.baselineGear, RESULT_SLOTS)
+      or not IsNonEmptyString(profile.fightStyle)
+      or not IsFiniteNumber(profile.baselineDps) or profile.baselineDps < 0
+      or profile.baselineDps > 1000000000000
+      or not IsFiniteNumber(profile.generatedAt) or profile.generatedAt <= 0
+      or profile.generatedAt > 9007199254740991
+      or profile.generatedAt % 1 ~= 0
+      or not IsNonEmptyString(profile.simcVersion)
+      or not IsNonEmptyString(profile.simcRevision)
+      or not IsNonEmptyString(profile.gameVersion)
+      or IsSecret(profile.dbcSource) or profile.dbcSource ~= "Live"
+      or not IsNonEmptyString(profile.profileHash) or #profile.profileHash ~= 64
+      or profile.profileHash:match("^[0-9a-f]+$") == nil
+      or IsSecret(profile.items) or type(profile.items) ~= "table"
+  then return false end
+  for _, slot in ipairs(BASELINE_SLOTS) do
+    local expected = profile.baselineGear[slot]
+    if IsSecret(expected) or (expected ~= false and not IsNonEmptyString(expected)) then
+      return false
+    end
+  end
+  for options, item in pairs(profile.items) do
+    if not IsValidItem(options, item) then return false end
+  end
+  return true
+end
+
+local function TableLength(value)
+  local count = 0
+  for _ in pairs(value) do count = count + 1 end
+  return count
+end
+
+-- Fail closed on the whole aggregate (not just one entry) if anything is
+-- malformed, non-dense, or two entries share an identity: a tampered file
+-- is never partially trusted, and one broken character must not hide
+-- another's data by accident, so we simply refuse all of it.
+local function ValidProfiles(results)
+  if IsSecret(results)
+      or type(results) ~= "table"
+      or IsSecret(results.schemaVersion)
+      or results.schemaVersion ~= 2
+      or IsSecret(results.profiles)
+      or type(results.profiles) ~= "table"
+      or not HasExactKeys(results, {schemaVersion=true, profiles=true}) then
+    return nil
+  end
+  local seenIdentity = {}
+  local profiles = {}
+  local arrayCount = 0
+  for _, profile in ipairs(results.profiles) do
+    arrayCount = arrayCount + 1
+    if not IsValidProfileShape(profile) then return nil end
+    local identityKey = string.lower(profile.region) .. "\30" .. string.lower(profile.server)
+        .. "\30" .. string.lower(profile.characterName) .. "\30" .. profile.specID
+    if seenIdentity[identityKey] then return nil end
+    seenIdentity[identityKey] = true
+    profiles[#profiles + 1] = profile
+  end
+  -- ipairs() alone stops at the first hole and silently ignores anything
+  -- past it (or keys outside 1..N); comparing against a full pairs() count
+  -- catches holes, non-sequential keys, and non-integer keys alike.
+  if arrayCount ~= TableLength(results.profiles) then
+    return nil
+  end
+  return profiles
+end
+
+local function CurrentRuntimeIdentity()
   local name = UnitName("player")
   local _, classFile = UnitClass("player")
   local _, raceFile = UnitRace("player")
@@ -297,107 +394,145 @@ local function CheckValidity()
   local specIndex = specAPI and specAPI.GetSpecialization and specAPI.GetSpecialization()
   if not specAPI or not specAPI.GetSpecializationInfo
       or IsSecret(specIndex) or type(specIndex) ~= "number" then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
+    return nil
   end
   local specID = specAPI.GetSpecializationInfo(specIndex)
-  if IsSecret(name) or IsSecret(classFile) or IsSecret(raceFile)
-      or IsSecret(level) or IsSecret(specID) then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
-  end
-  if name ~= results.characterName then
-    validityOK, validityReason = false, L.character
-    return validityOK, validityReason
-  end
   local realmName = GetRealmName()
-  if IsSecret(realmName) or type(realmName) ~= "string" then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
-  end
-  local realm = Tokenize(realmName)
   local regionID = GetCurrentRegion and GetCurrentRegion()
   if IsSecret(regionID) then regionID = nil end
   local region = regionID and REGION_NAMES[regionID]
-  if not realm or not region then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
+  if IsSecret(name) or IsSecret(classFile) or IsSecret(raceFile) or IsSecret(level)
+      or IsSecret(specID) or IsSecret(realmName)
+      or type(name) ~= "string" or type(realmName) ~= "string" or type(specID) ~= "number" then
+    return nil
   end
-  if realm ~= results.server or region ~= results.region then
-    validityOK, validityReason = false, L.character
-    return validityOK, validityReason
+  local realm = Tokenize(realmName)
+  if not realm or not region then return nil end
+  return {
+    -- WoW character names are unique per realm case-insensitively, so
+    -- comparing lowercase here can never conflate two different characters.
+    name = string.lower(name),
+    classFile = classFile,
+    raceFile = raceFile,
+    level = level,
+    specID = specID,
+    realm = realm,
+    region = region,
+  }
+end
+
+-- Exact match on region/realm/name/specID only: this is the one place that
+-- decides which character's data may ever be shown, so no cross-character
+-- leakage is possible even if two characters share item options.
+local function FindCurrentProfile(profiles, identity)
+  for _, profile in ipairs(profiles) do
+    if string.lower(profile.region) == identity.region
+        and string.lower(profile.server) == identity.realm
+        and string.lower(profile.characterName) == identity.name
+        and profile.specID == identity.specID then
+      return profile
+    end
   end
-  if not classFile or string.lower(classFile) ~= results.class or specID ~= results.specID then
-    validityOK, validityReason = false, L.classSpec
-    return validityOK, validityReason
+  return nil
+end
+
+local function ValidateProfileAgainstRuntime(profile, identity)
+  local now = time()
+  if not IsFiniteNumber(now) or profile.generatedAt > now + 300 then
+    return false, L.unknown
   end
-  if level ~= results.level or not raceFile or RaceToken(raceFile) ~= RaceToken(results.race) then
-    validityOK, validityReason = false, L.identity
-    return validityOK, validityReason
+  if now - profile.generatedAt > MAX_RESULT_AGE then
+    return false, L.expired
+  end
+  local wowVersion, wowBuild = GetBuildInfo()
+  if IsSecret(wowVersion) or IsSecret(wowBuild)
+      or type(wowVersion) ~= "string" or type(wowBuild) ~= "string" then
+    return false, L.unknown
+  end
+  if wowVersion .. "." .. wowBuild ~= profile.gameVersion then
+    return false, L.gameBuild
+  end
+  if not identity.classFile or string.lower(identity.classFile) ~= profile.class then
+    return false, L.classSpec
+  end
+  if identity.level ~= profile.level or not identity.raceFile
+      or RaceToken(identity.raceFile) ~= RaceToken(profile.race) then
+    return false, L.identity
   end
 
   local configID = C_ClassTalents and C_ClassTalents.GetActiveConfigID()
   if IsSecret(configID) or not configID or not C_Traits or not C_Traits.GenerateImportString then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
+    return false, L.unknown
   end
   local ok, talents = pcall(C_Traits.GenerateImportString, configID)
   if not ok or IsSecret(talents) or type(talents) ~= "string" then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
+    return false, L.unknown
   end
-  if talents ~= results.talents then
-    validityOK, validityReason = false, L.talents
-    return validityOK, validityReason
+  if talents ~= profile.talents then
+    return false, L.talents
   end
 
-  local expectedOmnium = results.traitSystems.omnium_talents
-  for optionName in pairs(results.traitSystems) do
+  local expectedOmnium = profile.traitSystems.omnium_talents
+  for optionName in pairs(profile.traitSystems) do
     if optionName ~= "omnium_talents" then
-      validityOK, validityReason = false, L.unknown
-      return validityOK, validityReason
+      return false, L.unknown
     end
   end
   local currentOmnium = CurrentTraitString(48)
   if currentOmnium == nil then
-    validityOK, validityReason = false, L.unknown
-    return validityOK, validityReason
+    return false, L.unknown
   end
   if currentOmnium ~= expectedOmnium then
-    validityOK, validityReason = false, L.traits
-    return validityOK, validityReason
+    return false, L.traits
   end
 
   for _, slot in ipairs(BASELINE_SLOTS) do
-    local expected = results.baselineGear[slot]
+    local expected = profile.baselineGear[slot]
+    if IsSecret(expected) then
+      return false, L.unknown
+    end
     if expected == nil or (expected ~= false and type(expected) ~= "string") then
-      validityOK, validityReason = false, L.noProfile
-      return validityOK, validityReason
+      return false, L.noProfile
     end
     local itemLink = GetInventoryItemLink("player", SLOT_IDS[slot])
     if IsSecret(itemLink) then
-      validityOK, validityReason = false, L.unknown
-      return validityOK, validityReason
+      return false, L.unknown
     end
     if expected == false then
       if itemLink ~= nil then
-        validityOK, validityReason = false, L.gear
-        return validityOK, validityReason
+        return false, L.gear
       end
     else
       if type(itemLink) ~= "string" then
-        validityOK, validityReason = false, L.unknown
-        return validityOK, validityReason
+        return false, L.unknown
       end
       if ItemOptions(itemLink) ~= expected then
-        validityOK, validityReason = false, L.gear
-        return validityOK, validityReason
+        return false, L.gear
       end
     end
   end
 
-  validityOK, validityReason = true, nil
-  return validityOK, validityReason
+  return true, nil
+end
+
+-- Locate exactly the current character/spec's record (if any) and validate
+-- it. Returns the matched profile (or nil), ok, reason -- item lookups in
+-- AddResult must only ever use the returned profile, never the raw table.
+local function CheckValidity()
+  local profiles = ValidProfiles(LocalGearAdvisorResults)
+  if not profiles then
+    return nil, false, L.noProfile
+  end
+  local identity = CurrentRuntimeIdentity()
+  if not identity then
+    return nil, false, L.unknown
+  end
+  local matched = FindCurrentProfile(profiles, identity)
+  if not matched then
+    return nil, false, L.noProfile
+  end
+  local ok, reason = ValidateProfileAgainstRuntime(matched, identity)
+  return matched, ok, reason
 end
 
 local trackedTooltips = setmetatable({}, { __mode = "k" })
@@ -433,9 +568,10 @@ local function AddResult(tooltip)
   if tooltip.__LocalGearAdvisorLink == itemLink then return end
 
   local options = ItemOptions(itemLink)
-  local results = LocalGearAdvisorResults
-  if not options or type(results) ~= "table" or type(results.items) ~= "table" then return end
-  local result = results.items[options]
+  if not options then return end
+  local profile, valid, reason = CheckValidity()
+  if not profile or type(profile.items) ~= "table" then return end
+  local result = profile.items[options]
   if type(result) ~= "table"
       or result.status ~= "simulated"
       or not IsFiniteNumber(result.deltaPercent)
@@ -452,18 +588,17 @@ local function AddResult(tooltip)
   tooltip:AddLine(" ")
   tooltip:AddLine(L.title, 0.20, 0.90, 0.85)
   tooltip:AddLine(L.dpsOnly, 0.95, 0.75, 0.20)
-  if type(results.fightStyle) == "string" then
-    tooltip:AddDoubleLine(L.scenario, results.fightStyle, 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
+  if type(profile.fightStyle) == "string" then
+    tooltip:AddDoubleLine(L.scenario, profile.fightStyle, 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
   end
   local now = time()
-  if IsFiniteNumber(results.generatedAt) and IsFiniteNumber(now) then
-    local age = math.max(0, now - results.generatedAt)
+  if IsFiniteNumber(profile.generatedAt) and IsFiniteNumber(now) then
+    local age = math.max(0, now - profile.generatedAt)
     tooltip:AddDoubleLine(L.age, AgeText(age), 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
   end
-  if type(results.simcVersion) == "string" then
-    tooltip:AddDoubleLine(L.simc, results.simcVersion, 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
+  if type(profile.simcVersion) == "string" then
+    tooltip:AddDoubleLine(L.simc, profile.simcVersion, 0.6, 0.6, 0.6, 0.8, 0.8, 0.8)
   end
-  local valid, reason = CheckValidity()
   if not valid then
     tooltip:AddDoubleLine(L.stale, reason or L.unknown, 1.0, 0.35, 0.25, 1.0, 0.75, 0.2)
     return

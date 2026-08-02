@@ -32,6 +32,18 @@ def _export_with_weapon_candidate() -> str:
     )
 
 
+def _second_character_export() -> str:
+    return (
+        _clean_export()
+        .replace('paladin="Testadin"', 'warrior="Zweiter"')
+        .replace("spec=protection", "spec=arms")
+    )
+
+
+def _second_spec_export() -> str:
+    return _clean_export().replace("spec=protection", "spec=retribution")
+
+
 def _fake_report(**kwargs):
     names = sorted(kwargs["expected_names"])
     return ParsedSimcReport(
@@ -73,6 +85,7 @@ def test_pipeline_publishes_only_after_complete_valid_results(tmp_path: Path) ->
         generated_at=1785573600,
         simc_runner=fake_runner,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert target.is_file()
@@ -100,6 +113,7 @@ def test_weapon_candidates_are_excluded_not_blocking(tmp_path: Path) -> None:
         generated_at=1785573600,
         simc_runner=fake_runner,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert target.is_file()
@@ -131,6 +145,7 @@ def test_weapon_below_min_item_level_is_classified_as_below_threshold(tmp_path: 
         generated_at=1785573600,
         simc_runner=_fake_report,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert summary.excluded_weapon_count == 0
@@ -155,6 +170,7 @@ def test_weapon_at_or_above_min_item_level_remains_unsupported(tmp_path: Path) -
         generated_at=1785573600,
         simc_runner=_fake_report,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert summary.excluded_weapon_count == 1
@@ -191,6 +207,7 @@ def test_candidates_below_min_item_level_are_excluded_not_simulated(tmp_path: Pa
         generated_at=1785573600,
         simc_runner=fake_runner,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert target.is_file()
@@ -233,6 +250,7 @@ def test_candidate_with_missing_item_level_fails_closed_as_unknown_exclusion(
         generated_at=1785573600,
         simc_runner=fake_runner,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert summary.excluded_unknown_item_level_count == 1
@@ -259,6 +277,7 @@ def test_candidate_with_out_of_range_item_level_fails_closed_as_unknown_exclusio
         generated_at=1785573600,
         simc_runner=_fake_report,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert summary.excluded_unknown_item_level_count == 1
@@ -279,6 +298,7 @@ def test_min_item_level_disabled_by_default_does_not_filter(tmp_path: Path) -> N
         generated_at=1785573600,
         simc_runner=_fake_report,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert summary.candidate_count == 3
@@ -332,6 +352,7 @@ def test_all_excluded_error_reports_reason_and_preserves_existing_result(
             run_root=tmp_path / "runs",
             simc_runner=should_not_run,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
 
     assert not called
@@ -354,6 +375,7 @@ def test_malformed_candidate_blocks_publication_and_preserves_existing_result(
             run_root=tmp_path / "runs",
             simc_runner=_fake_report,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
 
     assert target.read_text(encoding="utf-8") == "old verified result"
@@ -372,6 +394,7 @@ def test_incomplete_baseline_blocks_before_simulation(tmp_path: Path) -> None:
             run_root=tmp_path / "runs",
             simc_runner=_fake_report,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
 
 
@@ -388,6 +411,7 @@ def test_non_staging_output_is_rejected_before_simulation(tmp_path: Path) -> Non
             run_root=tmp_path / "runs",
             simc_runner=_fake_report,
             staging_target=staging,
+            state_path=tmp_path / "state" / "profiles.json",
         )
 
 
@@ -406,6 +430,7 @@ def test_reported_scenario_or_game_data_mismatch_blocks_publication(tmp_path: Pa
             run_root=tmp_path / "runs",
             simc_runner=ptr_runner,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
     assert not target.exists()
 
@@ -425,6 +450,7 @@ def test_exact_wow_build_mismatch_blocks_publication(tmp_path: Path) -> None:
             run_root=tmp_path / "runs",
             simc_runner=wrong_build,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
     assert not target.exists()
 
@@ -448,6 +474,7 @@ def test_titan_disc_belt_candidate_blocks_before_simulation(tmp_path: Path) -> N
             run_root=tmp_path / "runs",
             simc_runner=should_not_run,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
     assert not called
     assert not target.exists()
@@ -478,6 +505,7 @@ def test_titan_disc_belt_below_min_item_level_still_blocks_before_simulation(
             run_root=tmp_path / "runs",
             simc_runner=should_not_run,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
     assert not called
     assert not target.exists()
@@ -499,6 +527,7 @@ def test_reported_iteration_mismatch_blocks_publication(tmp_path: Path) -> None:
             run_root=tmp_path / "runs",
             simc_runner=wrong_iterations,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
     assert not target.exists()
 
@@ -515,6 +544,7 @@ def test_guardian_druid_export_is_accepted_and_renders_spec_id_104(tmp_path: Pat
         generated_at=1785573600,
         simc_runner=_fake_report,
         staging_target=target,
+        state_path=tmp_path / "state" / "profiles.json",
     )
 
     assert summary.spec == "guardian"
@@ -547,6 +577,7 @@ def test_unknown_class_spec_pair_fails_closed_before_simulation(tmp_path: Path) 
             run_root=tmp_path / "runs",
             simc_runner=should_not_run,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
 
     assert not called
@@ -573,6 +604,185 @@ def test_registry_revision_mismatch_blocks_publication_and_preserves_existing_re
             generated_at=1785573600,
             simc_runner=wrong_revision,
             staging_target=target,
+            state_path=tmp_path / "state" / "profiles.json",
         )
 
     assert target.read_text(encoding="utf-8") == "old verified result"
+
+
+def test_two_characters_coexist_after_separate_analyses(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    state_path = tmp_path / "state" / "profiles.json"
+
+    first = analyze_export(
+        export_text=_clean_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573600,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+    second = analyze_export(
+        export_text=_second_character_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573700,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+
+    assert first.retained_profile_count == 1
+    assert second.retained_profile_count == 2
+    published = target.read_text(encoding="utf-8")
+    assert 'characterName = "Testadin"' in published
+    assert 'characterName = "Zweiter"' in published
+    assert published.count("schemaVersion = 2") == 1
+
+
+def test_updating_one_character_retains_the_other(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    state_path = tmp_path / "state" / "profiles.json"
+
+    analyze_export(
+        export_text=_clean_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573600,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+    analyze_export(
+        export_text=_second_character_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573700,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+    third = analyze_export(
+        export_text=_clean_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573800,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+
+    assert third.retained_profile_count == 2
+    published = target.read_text(encoding="utf-8")
+    assert published.count('characterName = "Testadin"') == 1
+    assert published.count('characterName = "Zweiter"') == 1
+    assert "generatedAt = 1785573800" in published
+    assert "generatedAt = 1785573700" in published
+    assert "generatedAt = 1785573600" not in published
+
+
+def test_two_specs_of_same_character_are_both_retained(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    state_path = tmp_path / "state" / "profiles.json"
+
+    analyze_export(
+        export_text=_clean_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573600,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+    second = analyze_export(
+        export_text=_second_spec_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573700,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+
+    assert second.retained_profile_count == 2
+    published = target.read_text(encoding="utf-8")
+    assert published.count('characterName = "Testadin"') == 2
+    assert 'spec = "protection"' in published
+    assert 'spec = "retribution"' in published
+    assert "specID = 66" in published
+    assert "specID = 70" in published
+
+
+def test_analysis_summary_reports_identity_and_retained_count(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    state_path = tmp_path / "state" / "profiles.json"
+
+    summary = analyze_export(
+        export_text=_clean_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573600,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+
+    assert summary.region == "eu"
+    assert summary.realm == "testrealm"
+    assert summary.spec_id == 66
+    assert summary.retained_profile_count == 1
+
+
+def test_publication_failure_preserves_previous_state_json_and_lua(tmp_path: Path) -> None:
+    target = tmp_path / "addon" / "LocalGearAdvisor" / "Results.lua"
+    state_path = tmp_path / "state" / "profiles.json"
+
+    analyze_export(
+        export_text=_clean_export(),
+        executable=tmp_path / "simc.exe",
+        settings=SimSettings(iterations=1000),
+        results_path=target,
+        run_root=tmp_path / "runs",
+        generated_at=1785573600,
+        simc_runner=_fake_report,
+        staging_target=target,
+        state_path=state_path,
+    )
+    published_before = target.read_text(encoding="utf-8")
+    state_before = state_path.read_text(encoding="utf-8")
+
+    def wrong_revision(**kwargs):
+        return replace(_fake_report(**kwargs), git_revision="deadbeef")
+
+    with pytest.raises(Exception, match="registry revision"):
+        analyze_export(
+            export_text=_second_character_export(),
+            executable=tmp_path / "simc.exe",
+            settings=SimSettings(iterations=1000),
+            results_path=target,
+            run_root=tmp_path / "runs",
+            generated_at=1785573700,
+            simc_runner=wrong_revision,
+            staging_target=target,
+            state_path=state_path,
+        )
+
+    assert target.read_text(encoding="utf-8") == published_before
+    assert state_path.read_text(encoding="utf-8") == state_before
