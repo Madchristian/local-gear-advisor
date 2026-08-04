@@ -124,9 +124,9 @@ def verify_release_bundle(archive: Path) -> dict[str, str]:
         if len(set(zf.namelist())) != len(_RELEASE_FILES):
             raise ValueError("release ZIP contains duplicate names")
         payloads = {name: zf.read(name) for name in _RELEASE_FILES}
-    expected_manifest = "\n".join(
-        f"{_sha256(payloads[name])}  {name}" for name in _HASHED_FILES
-    ) + "\n"
+    expected_manifest = (
+        "\n".join(f"{_sha256(payloads[name])}  {name}" for name in _HASHED_FILES) + "\n"
+    )
     if payloads["SHA256SUMS.txt"] != expected_manifest.encode("ascii"):
         raise ValueError("release checksum manifest does not match ZIP bytes")
     return {name: _sha256(payloads[name]) for name in _RELEASE_FILES}

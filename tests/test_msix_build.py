@@ -57,9 +57,7 @@ def test_render_manifest_rejects_unusable_identity_values() -> None:
     with pytest.raises(ValueError, match="publisher"):
         build_msix.render_manifest(identity_name="Good.Name", publisher="Test")
     with pytest.raises(ValueError, match="four numeric"):
-        build_msix.render_manifest(
-            identity_name="Good.Name", publisher="CN=Test", version="0.2.1"
-        )
+        build_msix.render_manifest(identity_name="Good.Name", publisher="CN=Test", version="0.2.1")
 
 
 def test_stage_package_has_exact_allowlisted_payload(tmp_path: Path) -> None:
@@ -91,9 +89,10 @@ def test_stage_package_has_exact_allowlisted_payload(tmp_path: Path) -> None:
     ]
     assert (stage / "LocalGearAdvisor.exe").read_bytes() == executable.read_bytes()
     assert b"LocalGearAdvisor-Test" in (stage / "AppxManifest.xml").read_bytes()
-    assert b"<PublisherDisplayName>madchristian</PublisherDisplayName>" in (
-        stage / "AppxManifest.xml"
-    ).read_bytes()
+    assert (
+        b"<PublisherDisplayName>madchristian</PublisherDisplayName>"
+        in (stage / "AppxManifest.xml").read_bytes()
+    )
 
 
 def test_checked_in_msix_assets_have_expected_png_dimensions() -> None:

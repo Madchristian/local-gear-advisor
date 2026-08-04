@@ -35,8 +35,7 @@ def test_pyinstaller_command_is_single_file_console_capable_and_console_hidden(
     )
     assert (
         f"{root / 'src' / 'local_gear_advisor' / 'data' / 'spec_registry.json'};"
-        "local_gear_advisor/data"
-        in command
+        "local_gear_advisor/data" in command
     )
     assert (
         f"{root / 'portable' / 'LocalGearAdvisor.ico'};local_gear_advisor/portable_assets"

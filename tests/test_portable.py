@@ -127,6 +127,4 @@ def test_portable_entry_reports_top_level_failures_without_a_traceback() -> None
         raise RuntimeError("frozen startup failed")
 
     assert portable_entry.run(entry=fail, show_error=errors.append) == 1
-    assert errors == [
-        "Local Gear Advisor konnte nicht gestartet werden:\n\nfrozen startup failed"
-    ]
+    assert errors == ["Local Gear Advisor konnte nicht gestartet werden:\n\nfrozen startup failed"]

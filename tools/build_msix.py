@@ -42,9 +42,7 @@ def render_manifest(
     version: str = "0.2.1.0",
 ) -> str:
     _validate_identity(identity_name, publisher, version)
-    if not publisher_display_name.strip() or any(
-        ord(char) < 32 for char in publisher_display_name
-    ):
+    if not publisher_display_name.strip() or any(ord(char) < 32 for char in publisher_display_name):
         raise ValueError("MSIX publisher display name is invalid")
     identity_name = escape(identity_name, {'"': "&quot;"})
     publisher = escape(publisher, {'"': "&quot;"})
@@ -162,8 +160,7 @@ def is_store_identity(identity_name: str, publisher: str) -> bool:
     return not (
         identity_name.endswith((".Test", ".UnsignedTest"))
         or publisher in {"CN=LocalGearAdvisor-Test", "CN=Unsigned"}
-        or "oid.2.25.311729368913984317654407730594956997722=1"
-        in lowered_publisher
+        or "oid.2.25.311729368913984317654407730594956997722=1" in lowered_publisher
     )
 
 
@@ -189,9 +186,7 @@ def verify_msix(package: Path, *, expected_executable: bytes) -> dict[str, objec
         if len(names) != len(set(names)):
             raise ValueError("MSIX contains duplicate members")
         if any(
-            name.startswith(("/", "\\"))
-            or "\\" in name
-            or ".." in Path(name).parts
+            name.startswith(("/", "\\")) or "\\" in name or ".." in Path(name).parts
             for name in names
         ):
             raise ValueError("MSIX contains an unsafe member path")
@@ -254,9 +249,7 @@ def build_package(
 def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--identity-name", default="Madchristian.LocalGearAdvisor.Test"
-    )
+    parser.add_argument("--identity-name", default="Madchristian.LocalGearAdvisor.Test")
     parser.add_argument("--publisher", default="CN=LocalGearAdvisor-Test")
     parser.add_argument("--publisher-display-name", default="Madchristian")
     parser.add_argument("--version", default="0.2.1.0")
@@ -277,9 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         help="confirm that identity name and publisher were copied from Partner Center",
     )
     args = parser.parse_args(argv)
-    if args.partner_center_identity and not is_store_identity(
-        args.identity_name, args.publisher
-    ):
+    if args.partner_center_identity and not is_store_identity(args.identity_name, args.publisher):
         parser.error("test or unsigned identities cannot be submitted to the Store")
     report = build_package(
         root=root,
