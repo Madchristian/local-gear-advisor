@@ -86,6 +86,7 @@ def test_gui_worker_uses_queue_and_close_guard() -> None:
     assert "root.after(0, finish_" not in source
     assert "daemon=False" in source
     assert 'root.protocol("WM_DELETE_WINDOW", request_close)' in source
+    assert "portable.apply_window_icon(root)" in source
     assert "if analysis_running:" in source
     assert "min_item_level_var = tk.IntVar(value=282)" in source
     assert "min_item_level=min_item_level_var.get()" in source

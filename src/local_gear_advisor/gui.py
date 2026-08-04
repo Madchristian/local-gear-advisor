@@ -8,6 +8,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from . import portable
 from .cli import DEFAULT_DEPLOY_RECEIPT, DEFAULT_RESULTS, DEFAULT_RUN_ROOT
 from .deploy_results import (
     DeployError,
@@ -74,6 +75,7 @@ def _copy_import_text_to_clipboard(root, widget) -> bool:
 def launch() -> None:
     root = tk.Tk()
     root.title("Local Gear Advisor")
+    portable.apply_window_icon(root)
     root.geometry("820x700")
     root.minsize(680, 560)
 
